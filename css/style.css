@@ -148,9 +148,30 @@ button{font-family:inherit}
 .dbtn.down{grid-column:2;grid-row:2}
 .dbtn.right{grid-column:3;grid-row:2}
 
+/* ── v1.1 內建瀏覽器警告橫幅 ── */
+.inapp-banner{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;gap:10px;
+  align-items:flex-start;background:#8A2F1E;color:#fff;
+  padding:calc(10px + var(--safe-t)) 12px 10px;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+.inapp-banner.hidden{display:none}
+.inapp-banner p{margin:0;flex:1;font-size:13.5px;line-height:1.7;font-weight:700}
+.inapp-x{flex:0 0 30px;width:30px;height:30px;border:0;border-radius:50%;
+  background:rgba(255,255,255,.2);color:#fff;font-size:19px;line-height:1;cursor:pointer}
+/* 橫幅是 fixed，會蓋住各頁最上緣 —— 有橫幅時把內容整體往下推 */
+body.has-banner .pad{padding-top:calc(112px + var(--safe-t))}
+body.has-banner .ar-panel{padding-top:calc(108px + var(--safe-t))}
+body.has-banner .hud-top{padding-top:calc(96px + var(--safe-t))}
+
+/* ── v1.1 版號標記 ── */
+.ver-tag{position:absolute;right:12px;bottom:calc(10px + var(--safe-b));z-index:5;
+  font-size:11.5px;letter-spacing:.08em;font-weight:700;color:rgba(255,255,255,.55)}
+
 /* ── AR 模式 ── */
 #scr-ar{background:#000}
-#ar-host{position:absolute;inset:0}
+/* v1.1 預檢相機預覽：手勢內立刻播放，避免 iOS 手勢鏈斷裂造成的黑畫面 */
+.cam-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  background:#000;z-index:1;display:block}
+.cam-preview.hidden{display:none}
+#ar-host{position:absolute;inset:0;z-index:2}
 #ar-host a-scene, #ar-host .a-canvas{width:100% !important;height:100% !important}
 .mindar-ui-overlay{display:none !important}
 .ar-panel{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
@@ -181,6 +202,30 @@ button{font-family:inherit}
   background:rgba(11,31,58,.78);padding:10px 18px;border-radius:999px}
 #btn-scan-cancel{pointer-events:auto;max-width:220px;margin-top:20px;background:rgba(11,31,58,.7);
   color:#fff;border-color:rgba(255,255,255,.5)}
+
+/* ── v1.1 掃描狀態／倒數／黑畫面提示 ── */
+.scan-hint{max-width:min(90vw,430px);margin:12px 0 0;color:#FFE8B8;font-size:13.5px;
+  line-height:1.75;font-weight:700;text-align:center;background:rgba(122,49,38,.88);
+  padding:10px 16px;border-radius:14px}
+.scan-hint.hidden{display:none}
+.scan-wait{display:flex;flex-direction:column;align-items:center;margin-top:14px;pointer-events:auto}
+.scan-wait.hidden{display:none}
+.scan-count{margin:0 0 8px;color:#fff;font-size:13px;font-weight:700;
+  background:rgba(11,31,58,.78);padding:7px 15px;border-radius:999px}
+#btn-keep-wait{max-width:220px;margin:0;background:rgba(201,154,62,.92);color:#2A1F06;border-color:transparent}
+
+/* ── v1.1 診斷區塊 ── */
+.ar-warn{font-size:13px;line-height:1.75;color:#7A3126;background:#FBEDEA;
+  border-left:5px solid #C0553F;border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.fb-diag{background:#FBEDEA;border-left:5px solid #C0553F;border-radius:12px;
+  padding:12px 14px;margin:0 0 14px}
+.fb-diag.hidden{display:none}
+.fb-reason{margin:0 0 8px;font-size:15px;line-height:1.7;color:#7A3126}
+.fb-guide{margin:0;font-size:13px;line-height:1.8;color:#5B4A46}
+.diag-box{width:100%;margin-top:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:11.5px;line-height:1.6;border:2px solid #DCE5E8;border-radius:10px;padding:10px;
+  color:#334155;background:#F5F9FA;resize:vertical}
+.diag-box.hidden{display:none}
 
 /* ── 問答 ── */
 .quiz-q{font-size:22px;line-height:1.6;color:var(--navy);margin:0 0 20px;font-weight:800}

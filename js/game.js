@@ -60,6 +60,8 @@
     const st = window.AR ? AR.selfTest() : {};
     console.log('[selfTest]', st);
     if (!st.mindar) console.warn('[AR] MindAR 未載入，AR 掃描將無法使用（可走降級路徑）');
+    inAppBanner();
+    if (window.AR) AR.queryPermission();
     buildCharList();
     setTimeout(() => show('scr-title'), 260);
   }
@@ -252,20 +254,152 @@
     show('scr-ar');
   }
 
+  /* ── 掃描面板的狀態列 ── */
+  function scanStatus(txt) { $('#scan-status').textContent = txt; }
+  function scanHint(txt) {
+    const el = $('#scan-hint');
+    if (!txt) { el.classList.add('hidden'); el.textContent = ''; return; }
+    el.textContent = txt; el.classList.remove('hidden');
+  }
+  function scanWait(show, txt) {
+    $('#scan-wait').classList.toggle('hidden', !show);
+    if (txt) $('#scan-count').textContent = txt;
+  }
+
+  /* ── 降級：顯示原因 ＋ 三個選項（不自動跳轉） ── */
+  async function failCamera(info) {
+    await AR.stop();
+    $('#ar-scanning').classList.add('hidden');
+    scanHint(''); scanWait(false);
+    $('#fb-title').textContent = info && info.reason ? '相機無法使用' : '沒有相機也能繼續';
+    if (info && info.reason) {
+      $('#fb-reason').textContent = info.reason;
+      $('#fb-guide').textContent = info.guide || '';
+      $('#fb-diag').classList.remove('hidden');
+    } else {
+      $('#fb-diag').classList.add('hidden');
+    }
+    $('#diag-box').classList.add('hidden');
+    $('#ar-fallback').classList.remove('hidden');
+    $('#ar-intro').classList.add('hidden');
+  }
+
+  /* ── E. 串流健康檢查：12 秒寬限 ＋ 倒數 ＋「繼續等待」；亮度 > 6 立即解除 ── */
+  const GRACE = 12;
+  function healthCheck() {
+    return new Promise(resolve => {
+      let left = GRACE, blackShown = false;
+      AR.resetProbe();
+      scanWait(true, '正在等待相機畫面… ' + left + ' 秒');
+      healthCheck._keep = () => { left = GRACE; scanHint(''); blackShown = false; };
+      const timer = setInterval(() => {
+        const st = AR.probe();
+        if (st.hasFrame && st.bright) {                 // 有畫面且不是全黑 → 解除
+          clearInterval(timer); healthCheck._t = 0; healthCheck._keep = null;
+          scanWait(false); scanHint('');
+          scanStatus('對準關鍵圖片，讓整張圖填滿方框');
+          return resolve({ ok: true });
+        }
+        if (st.black && !blackShown) {                  // 連續 3 秒亮度 < 6
+          blackShown = true;
+          scanHint('相機已開但畫面全黑——若手機有鏡頭蓋請打開；或改用圖片模式。');
+        }
+        left--;
+        scanWait(true, '正在等待相機畫面… ' + left + ' 秒');
+        if (left <= 0) {
+          clearInterval(timer); healthCheck._t = 0; healthCheck._keep = null;
+          const st2 = AR.probe();
+          resolve({
+            ok: false,
+            reason: st2.hasFrame
+              ? '相機已開啟，但畫面持續全黑（平均亮度 ' + Math.round(st2.brightness * 10) / 10 + '）。'
+              : '相機串流沒有送出任何畫面（影像尺寸 ' + st2.width + '×' + st2.height + '）。',
+            guide: st2.hasFrame
+              ? '若手機有鏡頭保護蓋或貼紙請移除；或改用下方「圖片模式」完成這一關。'
+              : '請確認沒有其他 App 正在使用相機，然後按「重試相機」；或改用「圖片模式」。'
+          });
+        }
+      }, 1000);
+      healthCheck._t = timer;
+    });
+  }
+  function stopHealthCheck() {
+    if (healthCheck._t) { clearInterval(healthCheck._t); healthCheck._t = 0; }
+    healthCheck._keep = null;
+    scanWait(false); scanHint('');
+  }
+
+  /* ── A. 相機預檢：按鈕手勢內立刻 getUserMedia，再背景載 .mind ── */
   async function startCamera() {
     const L = cur();
     $('#ar-intro').classList.add('hidden');
+    $('#ar-fallback').classList.add('hidden');
     $('#ar-scanning').classList.remove('hidden');
+    scanHint(''); scanWait(false);
+    scanStatus('正在開啟相機…');
+
+    // 0) 環境預檢（HTTPS／API 是否存在）
+    const pf = AR.preflight();
+    if (!pf.ok) {
+      console.warn('[AR] preflight failed:', pf);
+      AR.queryPermission();
+      return failCamera(pf);
+    }
+
+    // 1) 手勢內「立刻」取得串流 —— 不先做任何 await，避免 iOS 手勢鏈斷裂
+    let stream;
     try {
-      await AR.start(L, { host: $('#ar-host'), onFound: () => { AR.stop(); showTeach(L); } });
-      toast('相機已啟動，請對準關鍵圖片');
+      stream = await AR.acquireCamera();
+    } catch (e) {
+      console.warn('[AR] getUserMedia failed:', e);
+      await AR.queryPermission();
+      const info = AR.explain(e);
+      if (AR.diagData().permission === 'denied' && info.code !== 'NotAllowedError') {
+        info.reason = '相機權限被拒，請到瀏覽器設定開啟。' + info.reason;
+      }
+      return failCamera(info);
+    }
+
+    // 2) 立即接到自己的預覽 video —— 使用者馬上看到相機活了
+    try { await AR.attachPreview($('#cam-preview'), stream); } catch (e) { console.warn(e); }
+    AR.queryPermission();
+    scanStatus('相機已開啟，正在載入辨識資料…');
+
+    // 3) 背景載入 .mind（600–800KB），轉成 blob URL 讓 MindAR 直接取用
+    let mindSrc;
+    try { mindSrc = await AR.prefetchTarget(L); }
+    catch (e) { mindSrc = null; }
+
+    // 4) 交棒給 MindAR：沿用同一條串流，不再第二次 getUserMedia
+    scanStatus('正在啟動 AR…');
+    try {
+      await AR.start(L, {
+        host: $('#ar-host'), stream: stream, mindSrc: mindSrc,
+        onFound: () => { AR.stop(); showTeach(L); }
+      });
+      await AR.repatch();               // B. 每次進掃描都強制修補 video
     } catch (e) {
       console.warn('[AR] start failed:', e);
-      await AR.stop();
-      $('#ar-scanning').classList.add('hidden');
-      $('#ar-fallback').classList.remove('hidden');
-      toast('相機無法啟動：' + (e && e.message ? e.message : e), 4200);
+      const info = e && e.__info ? e.__info
+        : { reason: 'AR 引擎啟動失敗：' + (e && e.message ? e.message : e),
+            guide: '請按「重試相機」，或改用「圖片模式」完成這一關。' };
+      return failCamera(info);
     }
+
+    // 5) 健康檢查（有畫面就把預覽收起來，交給 MindAR 的 video）
+    const hc = await healthCheck();
+    if (!hc.ok) {
+      console.warn('[AR] health check failed:', hc);
+      return failCamera(hc);
+    }
+    // MindAR 自己的 video 接手（會 cover 縮放）之後才收起預覽，避免中間閃黑
+    // 若 MindAR 遲遲沒接手（>5 秒），就讓預覽留著 —— 至少畫面不是黑的
+    let n = 0;
+    const swap = setInterval(() => {
+      if (AR.mindReady()) { clearInterval(swap); AR.hidePreview(); }
+      else if (++n > 20) clearInterval(swap);
+    }, 250);
+    toast('相機已啟動，請對準關鍵圖片');
   }
 
   function showTeach(L) {
@@ -388,19 +522,24 @@
       $('#ar-fallback').classList.remove('hidden');
     });
     $('#btn-ar-back').addEventListener('click', async () => {
-      await AR.stop(); show('scr-explore'); startLoop();
+      stopHealthCheck(); await AR.stop(); show('scr-explore'); startLoop();
     });
     $('#btn-scan-cancel').addEventListener('click', async () => {
+      stopHealthCheck();
       await AR.stop();
       $('#ar-scanning').classList.add('hidden');
       $('#ar-intro').classList.remove('hidden');
     });
+    $('#btn-keep-wait').addEventListener('click', () => {
+      if (!healthCheck._keep) return;                   // 倒數已結束就別再給假回饋
+      healthCheck._keep();                              // 倒數歸零重數
+      toast('好，再多等 ' + GRACE + ' 秒');
+    });
     $('#btn-fb-view').addEventListener('click', () => showTeach(cur()));
     $('#btn-fb-skip').addEventListener('click', () => { showTeach(cur()); toast('已跳過掃描，教學內容照樣完整'); });
-    $('#btn-fb-retry').addEventListener('click', () => {
-      $('#ar-fallback').classList.add('hidden');
-      $('#ar-intro').classList.remove('hidden');
-    });
+    // 重試相機：click 本身就是使用者手勢，直接重跑預檢流程
+    $('#btn-fb-retry').addEventListener('click', () => { startCamera(); });
+    $('#btn-copy-diag').addEventListener('click', copyDiag);
     $('#btn-to-quiz').addEventListener('click', async () => { await AR.stop(); enterQuiz(); });
     $('#btn-quiz-next').addEventListener('click', enterLesson);
     $('#btn-lesson-next').addEventListener('click', nextLevel);
@@ -408,11 +547,58 @@
     $('#btn-restart').addEventListener('click', () => { S.char = null; $('#btn-char-next').disabled = true;
       $$('.char-card').forEach(x => x.classList.remove('sel')); show('scr-title'); });
 
+    $('#inapp-close').addEventListener('click', () => {
+      $('#inapp-banner').classList.add('hidden');
+      document.body.classList.remove('has-banner');
+    });
+
     bindDpad();
     addEventListener('resize', relayoutExplore);
     addEventListener('orientationchange', () => setTimeout(relayoutExplore, 250));
-    addEventListener('pagehide', () => AR.stop());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) AR.stop(); });
+    addEventListener('pagehide', () => { stopHealthCheck(); AR.stop(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { stopHealthCheck(); AR.stop(); }
+    });
+  }
+
+  /* ── D. 複製診斷資訊 ── */
+  async function copyDiag() {
+    const text = AR.diagText();
+    const box = $('#diag-box');
+    box.value = text;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        toast('診斷資訊已複製，請貼給我們', 3200);
+        return;
+      }
+      throw new Error('no clipboard api');
+    } catch (e) {
+      box.classList.remove('hidden');
+      box.focus(); box.select();
+      try {
+        if (document.execCommand && document.execCommand('copy')) {
+          toast('診斷資訊已複製，請貼給我們', 3200); return;
+        }
+      } catch (e2) { /* 交給使用者手動複製 */ }
+      toast('請長按下方文字方塊全選複製', 3600);
+    }
+  }
+
+  /* ── C. 內建瀏覽器橫幅 ── */
+  function inAppBanner() {
+    const info = AR.detectInApp(navigator.userAgent);
+    if (!info.inApp) return;
+    let tip = info.tip;
+    if (info.app === 'line') {
+      if (!/openExternalBrowser=1/.test(location.search)) return;   // 正在自動導向，先不顯示
+      // 已經帶了參數卻還在 LINE 裡（舊版 LINE 不吃這個參數）→ 給手動逃生指引
+      tip = '已嘗試自動改用外部瀏覽器但仍在 LINE 內。請點右下角選單（⋯）→「用其他瀏覽器開啟」，' +
+            '或複製網址後貼到 Safari／Chrome，相機才能使用。';
+    }
+    $('#inapp-text').textContent = '你正在「' + info.name + '」的內建瀏覽器中。' + tip;
+    $('#inapp-banner').classList.remove('hidden');
+    document.body.classList.add('has-banner');
   }
 
   /* 測試掛鉤：讓自動化驗證可以驅動流程（不影響一般玩法） */
@@ -433,7 +619,10 @@
       drawHero(); checkGoal();
       return { x: P.x, y: P.y };
     },
-    gotoLevel: n => { S.idx = S.queue.indexOf(n); enterLevel(); }
+    gotoLevel: n => { S.idx = S.queue.indexOf(n); enterLevel(); },
+    // v1.1 相機診斷驗收用
+    startCamera, failCamera, copyDiag, inAppBanner,
+    healthCheck, stopHealthCheck, scanStatus, scanHint, scanWait
   };
 
   bind();

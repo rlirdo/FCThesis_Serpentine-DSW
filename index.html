@@ -7,16 +7,22 @@
 <meta name="description" content="花蓮綠色化學闖關 — 手機 WebAR 教學遊戲｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>花蓮綠色化學闖關</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=1.1">
 <!-- A-Frame 必須先於 MindAR；全部 defer，順序保留且不阻擋載入畫面繪製 -->
 <script defer src="vendor/aframe.min.js"></script>
 <script defer src="vendor/mindar-image-aframe.prod.js"></script>
-<script defer src="js/data.js"></script>
-<script defer src="js/visuals.js"></script>
-<script defer src="js/ar.js"></script>
-<script defer src="js/game.js"></script>
+<script defer src="js/data.js?v=1.1"></script>
+<script defer src="js/visuals.js?v=1.1"></script>
+<script defer src="js/ar.js?v=1.1"></script>
+<script defer src="js/game.js?v=1.1"></script>
 </head>
 <body>
+
+<!-- ═══════════ 內建瀏覽器警告橫幅（LINE／FB／IG／微信） ═══════════ -->
+<div id="inapp-banner" class="inapp-banner hidden">
+  <p id="inapp-text"></p>
+  <button id="inapp-close" class="inapp-x" aria-label="關閉提示">×</button>
+</div>
 
 <!-- ═══════════ 載入畫面 ═══════════ -->
 <section id="scr-loading" class="screen dark active">
@@ -26,6 +32,7 @@
     <p class="load-sub">HUALIEN GREEN CHEMISTRY QUEST</p>
     <p id="load-msg" class="load-msg">正在準備素材…</p>
   </div>
+  <span class="ver-tag">v1.1</span>
 </section>
 
 <!-- ═══════════ 標題頁 ═══════════ -->
@@ -46,6 +53,7 @@
     <button id="btn-start" class="btn primary big">開始冒險</button>
     <button id="btn-howto" class="btn ghost">怎麼玩？</button>
   </div>
+  <span class="ver-tag">v1.1</span>
 </section>
 
 <!-- ═══════════ 玩法說明 ═══════════ -->
@@ -130,6 +138,8 @@
 
 <!-- ═══════════ AR 掃描模式 ═══════════ -->
 <section id="scr-ar" class="screen ar">
+  <!-- 預檢相機畫面：按下按鈕的手勢內立刻取得串流並播放，使用者馬上看到相機活著 -->
+  <video id="cam-preview" class="cam-preview hidden" playsinline webkit-playsinline muted autoplay></video>
   <div id="ar-host"></div>
 
   <div id="ar-intro" class="ar-panel">
@@ -138,6 +148,8 @@
       <h3 id="ar-intro-title">準備掃描</h3>
       <p class="ar-p">請把<b>關卡關鍵圖片</b>平放在桌面或牆上，光線充足，
         然後按下方按鈕開啟<b>後鏡頭</b>，讓整張圖填滿畫面。</p>
+      <p class="ar-warn">若你是從 <b>LINE／Facebook／Instagram</b> 點開本頁，相機會被那些 App 的內建瀏覽器封鎖，
+        請改用 <b>Safari</b>（iPhone）或 <b>Chrome</b>（Android）開啟。</p>
       <p class="ar-note">影像只在你的裝置上即時處理，不會上傳、不會儲存。</p>
       <button id="btn-cam" class="btn primary big">開始掃描（開啟相機）</button>
       <button id="btn-nocam" class="btn ghost">沒有相機／不方便掃描</button>
@@ -147,19 +159,32 @@
 
   <div id="ar-scanning" class="ar-scanning hidden">
     <div class="reticle"><span></span><span></span><span></span><span></span></div>
-    <p class="scan-tip">對準關鍵圖片，讓整張圖填滿方框</p>
+    <p id="scan-status" class="scan-tip">對準關鍵圖片，讓整張圖填滿方框</p>
+    <p id="scan-hint" class="scan-hint hidden"></p>
+    <div id="scan-wait" class="scan-wait hidden">
+      <p id="scan-count" class="scan-count"></p>
+      <button id="btn-keep-wait" class="btn ghost small">繼續等待</button>
+    </div>
     <button id="btn-scan-cancel" class="btn ghost small">取消</button>
   </div>
 
   <div id="ar-fallback" class="ar-panel hidden">
     <div class="ar-card">
-      <p class="kicker">NO CAMERA · 無障礙路徑</p>
-      <h3>沒有相機也能繼續</h3>
+      <p class="kicker">CAMERA DIAGNOSTIC · 相機診斷</p>
+      <h3 id="fb-title">沒有相機也能繼續</h3>
+
+      <div id="fb-diag" class="fb-diag hidden">
+        <p class="fb-reason"><b>原因：</b><span id="fb-reason"></span></p>
+        <p class="fb-guide" id="fb-guide"></p>
+      </div>
+
       <p class="ar-p">相機不是必要的。你可以直接看關鍵圖片，一樣可以學完這一關。</p>
       <img id="fb-img" class="fb-img" alt="關卡關鍵圖片">
-      <button id="btn-fb-view" class="btn primary big">用圖片模式繼續</button>
-      <button id="btn-fb-skip" class="btn ghost">跳過掃描，直接答題</button>
-      <button id="btn-fb-retry" class="btn ghost small">再試一次相機</button>
+      <button id="btn-fb-retry" class="btn primary big">重試相機</button>
+      <button id="btn-fb-view" class="btn ghost">用圖片模式繼續</button>
+      <button id="btn-fb-skip" class="btn ghost">直接答題</button>
+      <button id="btn-copy-diag" class="btn ghost small">📋 複製診斷資訊</button>
+      <textarea id="diag-box" class="diag-box hidden" readonly rows="10"></textarea>
     </div>
   </div>
 

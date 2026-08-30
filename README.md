@@ -123,18 +123,49 @@ python tools/gen_print_pdf.py     # A4 列印稿 PDF
 
 ---
 
-## 手機相容性處理
+## ⚠️ 分享連結時請務必附上參數
+
+**LINE 的內建瀏覽器會封鎖相機。** 從 LINE 直接點開網址，掃描框會全黑。
+因此對外分享（LINE 群組、公告、QR Code）時，請一律使用下面這個網址：
+
+```
+https://rlirdo.github.io/FCThesis_Serpentine-DSW/?openExternalBrowser=1
+```
+
+帶了 `openExternalBrowser=1`，LINE 會自動改用手機的外部瀏覽器（Safari／Chrome）開啟，相機就能正常運作。
+（即使不帶參數，v1.1 也會在偵測到 LINE 時自動補上參數並重新導向；帶參數只是更保險、少一次跳轉。）
+
+Facebook／Instagram／微信的內建瀏覽器沒有等效參數，v1.1 會顯示置頂橫幅，
+指引使用者從 App 選單選「以瀏覽器開啟」。
+
+---
+
+## 手機相容性處理（v1.1）
 
 | 項目 | 做法 |
 |---|---|
-| iOS 需使用者手勢才能開相機 | `getUserMedia` **只在「開始掃描」按鈕的 click 內**觸發，絕不自動啟動 |
-| iOS 會全螢幕接管影片 | video 一律補上 `playsinline` / `webkit-playsinline` / `muted` / `autoplay`（MutationObserver 補強） |
-| 後鏡頭 | `facingMode: "environment"` |
+| **LINE 內建瀏覽器封鎖相機**（實測主因） | 偵測 UA 含 `Line/` 或 `LIFF/` → 自動導向同網址 ＋ `?openExternalBrowser=1`（保留原有 query 與 hash；已帶參數則不再導向，不會無限迴圈） |
+| FB／IG／微信內建瀏覽器 | 顯示置頂紅色橫幅 ＋ 掃描面板常駐提示，指引改用外部瀏覽器 |
+| iOS 需使用者手勢才能開相機 | **按鈕 click 內第一件事就是 `getUserMedia`**（不再先載 600–800 KB 的 `.mind`），取得串流後立刻接上自己的 `<video id="cam-preview">`，使用者馬上看到畫面 |
+| `.mind` 載入 | 預覽播放的同時在背景 `fetch()` 並轉成 blob URL 交給 MindAR，載入不佔用手勢時間 |
+| 相機串流交棒 | 覆寫 MindAR 的 `_startVideo`，**把預檢那條串流直接餵進去**，全程只呼叫一次 `getUserMedia`（避免 iOS 脫離手勢、避免 Android 鏡頭尚未釋放的 `NotReadableError`） |
+| iOS 會全螢幕接管影片 | 所有 video 補 `playsinline` / `webkit-playsinline` / `muted` / `autoplay`，並主動呼叫 `play()`（攔截 rejection 記錄到診斷）；MutationObserver 補強 |
+| 後鏡頭 | `facingMode: { ideal: 'environment' }`（用 ideal 不用 exact，單鏡頭 Android 才不會直接失敗）；`OverconstrainedError` 時降級為 `{ video: true }` 重試一次 |
 | HTTPS | 非 `localhost` 一律需 HTTPS，程式會先 preflight 檢查並給明確訊息 |
-| 相機靜默失敗 | MindAR 的 `start()` 在權限被拒時仍可能 resolve，故另外檢查 `videoWidth > 0`，8 秒沒畫面即判定失敗 |
-| 無相機／不授權 | 提供「圖片模式」與「跳過掃描直接答題」，**沒有相機也能完整玩完**（教學場域的無障礙需求） |
+| 相機靜默失敗 | 除了 `videoWidth > 0`，另外每秒把畫面畫到 4×4 canvas 取平均亮度；連續 3 秒 < 6 判定「黑畫面」並顯示鏡頭蓋提示 |
+| 健康檢查 | 寬限 **12 秒**並顯示倒數與「繼續等待」按鈕；亮度 > 6 立即解除。逾時**不自動跳轉**，改為顯示原因 ＋ 三個選項（重試相機／圖片模式／直接答題） |
+| 問題回報 | 「📋 複製診斷資訊」一鍵複製 UA、權限狀態、錯誤名稱、影像尺寸、亮度值等（剪貼簿不可用時退回文字方塊供手動複製） |
+| 無相機／不授權 | 提供「圖片模式」與「直接答題」，**沒有相機也能完整玩完**（教學場域的無障礙需求） |
 | 觸控 | 所有按鈕 ≥ 44 px；方向鍵 64 px |
 | 瀏海／安全區 | `viewport-fit=cover` ＋ `env(safe-area-inset-*)` |
+| 版本可視化 | 開場頁右下角顯示 `v1.1`；`index.html` 對 js/css 加 `?v=1.1` 破快取 |
+
+內建瀏覽器偵測與 LINE 逃生網址已抽成純函式（`AR.detectInApp(ua)` / `AR.externalBrowserUrl(href, ua)`），
+可離線單元測試：
+
+```bash
+node tools/test_inapp.js      # 39 項，全數通過
+```
 
 ---
 
