@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 170" width="120" height="170">
+  <title>阿海</title>
+  <defs>
+    <linearGradient id="ahJacket" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1C7293"/><stop offset="1" stop-color="#065A82"/>
+    </linearGradient>
+    <linearGradient id="ahHair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#243A52"/><stop offset="1" stop-color="#0B1F3A"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="60" cy="163" rx="30" ry="6" fill="#0B1F3A" opacity=".18"/>
+  <!-- 腿 -->
+  <rect x="45" y="118" width="13" height="38" rx="6" fill="#22364C"/>
+  <rect x="62" y="118" width="13" height="38" rx="6" fill="#1A2C40"/>
+  <rect x="41" y="150" width="20" height="10" rx="5" fill="#F5F9FA"/>
+  <rect x="59" y="150" width="20" height="10" rx="5" fill="#E4EDF0"/>
+  <!-- 身體 -->
+  <path d="M38 68 q22-9 44 0 l6 42 q-28 9 -56 0 z" fill="url(#ahJacket)"/>
+  <path d="M60 62 v52" stroke="#0B1F3A" stroke-width="2.5" opacity=".55"/>
+  <path d="M46 70 l14 14 l14-14 l-6-6 h-16 z" fill="#F5F9FA"/>
+  <!-- 胸前浪花徽章 -->
+  <path d="M50 96 q6-6 11 0 t11 0" stroke="#9FE0EF" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- 手臂 -->
+  <rect x="26" y="70" width="13" height="40" rx="6.5" fill="#1C7293"/>
+  <rect x="81" y="70" width="13" height="40" rx="6.5" fill="#1C7293"/>
+  <circle cx="32" cy="114" r="7" fill="#F2C89A"/>
+  <circle cx="88" cy="114" r="7" fill="#F2C89A"/>
+  <!-- 頭 -->
+  <rect x="52" y="52" width="16" height="12" rx="5" fill="#F2C89A"/>
+  <ellipse cx="60" cy="34" rx="24" ry="25" fill="#F7D6AC"/>
+  <path d="M36 32 q3-24 24-24 t24 24 q-6-9 -24-9 t-24 9z" fill="url(#ahHair)"/>
+  <path d="M36 30 q10-6 22-4 q-8 8 -22 12 z" fill="#243A52"/>
+  <ellipse cx="51" cy="35" rx="3.4" ry="4.2" fill="#0B1F3A"/>
+  <ellipse cx="69" cy="35" rx="3.4" ry="4.2" fill="#0B1F3A"/>
+  <circle cx="52.2" cy="33.6" r="1.2" fill="#fff"/>
+  <circle cx="70.2" cy="33.6" r="1.2" fill="#fff"/>
+  <path d="M45 27 q6-3 11 0" stroke="#243A52" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path d="M64 27 q5-3 11 0" stroke="#243A52" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path d="M54 45 q6 5 12 0" stroke="#B4632F" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <ellipse cx="42" cy="41" rx="4" ry="2.6" fill="#F0A98C" opacity=".7"/>
+  <ellipse cx="78" cy="41" rx="4" ry="2.6" fill="#F0A98C" opacity=".7"/>
+</svg>

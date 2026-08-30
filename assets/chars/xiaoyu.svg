@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 170" width="120" height="170">
+  <title>小玉</title>
+  <defs>
+    <linearGradient id="xyDress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5FA98A"/><stop offset="1" stop-color="#2E7D5B"/>
+    </linearGradient>
+    <linearGradient id="xyHair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5A4030"/><stop offset="1" stop-color="#33251A"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="60" cy="163" rx="30" ry="6" fill="#0B1F3A" opacity=".18"/>
+  <rect x="47" y="122" width="11" height="32" rx="5.5" fill="#F7D6AC"/>
+  <rect x="62" y="122" width="11" height="32" rx="5.5" fill="#F2C89A"/>
+  <rect x="43" y="150" width="19" height="10" rx="5" fill="#C99A3E"/>
+  <rect x="59" y="150" width="19" height="10" rx="5" fill="#B4882F"/>
+  <!-- 連身裙 -->
+  <path d="M40 68 q20-8 40 0 l10 56 q-30 9 -60 0 z" fill="url(#xyDress)"/>
+  <path d="M42 92 q18 6 36 0" stroke="#C99A3E" stroke-width="4" fill="none"/>
+  <!-- 葉子徽章 -->
+  <path d="M60 78 q9 5 0 14 q-9-9 0-14z" fill="#EAF6EF"/>
+  <path d="M60 80 v10" stroke="#2E7D5B" stroke-width="1.6"/>
+  <!-- 手臂 -->
+  <rect x="27" y="70" width="12" height="38" rx="6" fill="#6FBB99"/>
+  <rect x="81" y="70" width="12" height="38" rx="6" fill="#6FBB99"/>
+  <circle cx="33" cy="112" r="7" fill="#F7D6AC"/>
+  <circle cx="87" cy="112" r="7" fill="#F7D6AC"/>
+  <!-- 頭 -->
+  <rect x="52" y="52" width="16" height="12" rx="5" fill="#F7D6AC"/>
+  <!-- 雙馬尾 -->
+  <path d="M28 34 q-10 20 -2 38 q12-6 12-26z" fill="url(#xyHair)"/>
+  <path d="M92 34 q10 20 2 38 q-12-6 -12-26z" fill="url(#xyHair)"/>
+  <circle cx="32" cy="36" r="5" fill="#C99A3E"/>
+  <circle cx="88" cy="36" r="5" fill="#C99A3E"/>
+  <ellipse cx="60" cy="35" rx="25" ry="26" fill="#FBE0BB"/>
+  <path d="M34 34 q2-26 26-26 t26 26 q-5-12 -26-12 t-26 12z" fill="url(#xyHair)"/>
+  <path d="M34 33 q14-11 30-6 q-12 9 -30 14z" fill="#5A4030"/>
+  <ellipse cx="50" cy="36" rx="3.8" ry="4.6" fill="#33251A"/>
+  <ellipse cx="70" cy="36" rx="3.8" ry="4.6" fill="#33251A"/>
+  <circle cx="51.4" cy="34.4" r="1.4" fill="#fff"/>
+  <circle cx="71.4" cy="34.4" r="1.4" fill="#fff"/>
+  <path d="M44 28 q6-4 12-1" stroke="#5A4030" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M64 27 q6-3 12 1" stroke="#5A4030" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M54 45 q6 6 12 0" stroke="#C2603C" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <ellipse cx="41" cy="42" rx="4.4" ry="3" fill="#F5A08C" opacity=".75"/>
+  <ellipse cx="79" cy="42" rx="4.4" ry="3" fill="#F5A08C" opacity=".75"/>
+</svg>

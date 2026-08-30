@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B1F3A">
+<meta name="description" content="花蓮綠色化學闖關 — 手機 WebAR 教學遊戲｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>花蓮綠色化學闖關</title>
+<link rel="stylesheet" href="css/style.css">
+<!-- A-Frame 必須先於 MindAR；全部 defer，順序保留且不阻擋載入畫面繪製 -->
+<script defer src="vendor/aframe.min.js"></script>
+<script defer src="vendor/mindar-image-aframe.prod.js"></script>
+<script defer src="js/data.js"></script>
+<script defer src="js/visuals.js"></script>
+<script defer src="js/ar.js"></script>
+<script defer src="js/game.js"></script>
+</head>
+<body>
+
+<!-- ═══════════ 載入畫面 ═══════════ -->
+<section id="scr-loading" class="screen dark active">
+  <div class="loader-wrap">
+    <div class="spinner"></div>
+    <h1 class="load-title">花蓮綠色化學闖關</h1>
+    <p class="load-sub">HUALIEN GREEN CHEMISTRY QUEST</p>
+    <p id="load-msg" class="load-msg">正在準備素材…</p>
+  </div>
+</section>
+
+<!-- ═══════════ 標題頁 ═══════════ -->
+<section id="scr-title" class="screen dark">
+  <div class="deco-circle c1"></div><div class="deco-circle c2"></div>
+  <div class="pad">
+    <p class="eyebrow">仿生與環境工作坊 ・ 環境教育 WebAR</p>
+    <h1 class="big-title">花蓮綠色化學<br>闖關遊戲</h1>
+    <p class="sub-en">Hualien Green Chemistry Quest — A WebAR Learning Journey</p>
+    <div class="pills">
+      <span class="pill teal">在地資源</span>
+      <span class="pill green">循環經濟</span>
+      <span class="pill gold">綠色化學</span>
+      <span class="pill deep">環境永續</span>
+    </div>
+    <hr class="rule">
+    <p class="byline">國立東華大學自然資源與環境學系<br>指導教授：楊悠娟 教授　｜　製作：游豐兆 博士生</p>
+    <button id="btn-start" class="btn primary big">開始冒險</button>
+    <button id="btn-howto" class="btn ghost">怎麼玩？</button>
+  </div>
+</section>
+
+<!-- ═══════════ 玩法說明 ═══════════ -->
+<section id="scr-howto" class="screen light">
+  <div class="pad">
+    <p class="kicker">HOW TO PLAY</p>
+    <h2 class="page-title">怎麼玩</h2>
+    <ol class="howto">
+      <li><b>選主角</b>：阿海、小玉、蛇紋獸，三選一。</li>
+      <li><b>選關卡數</b>：5 關（精華版）或 10 關（完整版）。</li>
+      <li><b>探索模式</b>：用畫面下方的方向鍵移動主角，走到會發光的目標點。</li>
+      <li><b>AR 掃描</b>：按「開始掃描」開啟後鏡頭，對準該關的<b>關鍵圖片</b>（列印稿在 print 資料夾）。</li>
+      <li><b>答題過關</b>：教學內容浮現後回答一題；答錯會給提示，可以重試。</li>
+      <li><b>沒有相機也能玩</b>：可改用「圖片模式」或直接跳過掃描作答。</li>
+    </ol>
+    <div class="note">
+      <b>相機說明</b>：本遊戲需要使用手機的<b>後鏡頭</b>來辨識圖片。影像只在你的手機上即時處理，
+      <b>不會上傳、不會儲存</b>。首次使用瀏覽器會詢問相機權限，請點「允許」。
+    </div>
+    <button class="btn primary big" data-go="scr-title">回到首頁</button>
+  </div>
+</section>
+
+<!-- ═══════════ 選主角 ═══════════ -->
+<section id="scr-char" class="screen light">
+  <div class="pad">
+    <p class="kicker">01 / CHOOSE YOUR HERO</p>
+    <h2 class="page-title">選擇你的主角</h2>
+    <p class="page-sub">三位夥伴，個性不同，任務相同</p>
+    <div id="char-list" class="char-list"></div>
+    <button id="btn-char-next" class="btn primary big" disabled>下一步</button>
+  </div>
+</section>
+
+<!-- ═══════════ 選關卡數 ═══════════ -->
+<section id="scr-mode" class="screen light">
+  <div class="pad">
+    <p class="kicker">02 / CHOOSE YOUR ROUTE</p>
+    <h2 class="page-title">選擇關卡數</h2>
+    <p class="page-sub">時間有限就走精華版，想學完整就走完整版</p>
+    <div class="mode-list">
+      <button class="mode-card" data-mode="5">
+        <span class="mode-n">5</span>
+        <span class="mode-t">精華版</span>
+        <span class="mode-d">約 15 分鐘<br>山與海・墨玉門把・水・微胞・杯墊</span>
+      </button>
+      <button class="mode-card" data-mode="10">
+        <span class="mode-n">10</span>
+        <span class="mode-t">完整版</span>
+        <span class="mode-d">約 30 分鐘<br>從在地資源一路走到綠色化學十二原則</span>
+      </button>
+    </div>
+    <button class="btn ghost" data-go="scr-char">上一步</button>
+  </div>
+</section>
+
+<!-- ═══════════ 探索模式 ═══════════ -->
+<section id="scr-explore" class="screen">
+  <div id="stage" class="stage">
+    <div id="goal" class="goal"><span class="goal-ring"></span><span class="goal-dot">?</span></div>
+    <img id="hero" class="hero" alt="主角">
+  </div>
+  <div class="hud-top">
+    <div class="hud-bar">
+      <span id="hud-level" class="hud-level">01</span>
+      <span id="hud-place" class="hud-place"></span>
+      <span id="hud-prog" class="hud-prog"></span>
+    </div>
+    <div id="bubble" class="bubble"><p id="bubble-text"></p></div>
+  </div>
+  <div class="hud-bottom">
+    <!-- 一律佔住版面（僅以 off 隱藏可見度），讓可行走區的下緣不會隨按鈕出現而跳動 -->
+    <button id="btn-scan" class="btn scan off">開始掃描</button>
+    <div class="dpad" role="group" aria-label="方向鍵">
+      <button class="dbtn up"    data-dir="up"    aria-label="向上">▲</button>
+      <button class="dbtn left"  data-dir="left"  aria-label="向左">◀</button>
+      <button class="dbtn right" data-dir="right" aria-label="向右">▶</button>
+      <button class="dbtn down"  data-dir="down"  aria-label="向下">▼</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ AR 掃描模式 ═══════════ -->
+<section id="scr-ar" class="screen ar">
+  <div id="ar-host"></div>
+
+  <div id="ar-intro" class="ar-panel">
+    <div class="ar-card">
+      <p class="kicker">AR SCAN</p>
+      <h3 id="ar-intro-title">準備掃描</h3>
+      <p class="ar-p">請把<b>關卡關鍵圖片</b>平放在桌面或牆上，光線充足，
+        然後按下方按鈕開啟<b>後鏡頭</b>，讓整張圖填滿畫面。</p>
+      <p class="ar-note">影像只在你的裝置上即時處理，不會上傳、不會儲存。</p>
+      <button id="btn-cam" class="btn primary big">開始掃描（開啟相機）</button>
+      <button id="btn-nocam" class="btn ghost">沒有相機／不方便掃描</button>
+      <button id="btn-ar-back" class="btn ghost small">回到探索</button>
+    </div>
+  </div>
+
+  <div id="ar-scanning" class="ar-scanning hidden">
+    <div class="reticle"><span></span><span></span><span></span><span></span></div>
+    <p class="scan-tip">對準關鍵圖片，讓整張圖填滿方框</p>
+    <button id="btn-scan-cancel" class="btn ghost small">取消</button>
+  </div>
+
+  <div id="ar-fallback" class="ar-panel hidden">
+    <div class="ar-card">
+      <p class="kicker">NO CAMERA · 無障礙路徑</p>
+      <h3>沒有相機也能繼續</h3>
+      <p class="ar-p">相機不是必要的。你可以直接看關鍵圖片，一樣可以學完這一關。</p>
+      <img id="fb-img" class="fb-img" alt="關卡關鍵圖片">
+      <button id="btn-fb-view" class="btn primary big">用圖片模式繼續</button>
+      <button id="btn-fb-skip" class="btn ghost">跳過掃描，直接答題</button>
+      <button id="btn-fb-retry" class="btn ghost small">再試一次相機</button>
+    </div>
+  </div>
+
+  <div id="ar-teach" class="ar-panel hidden">
+    <div class="ar-card teach">
+      <p class="kicker">教學內容 · <span id="teach-en"></span></p>
+      <h3 id="teach-title"></h3>
+      <div id="teach-visual" class="teach-visual"></div>
+      <ul id="teach-points" class="teach-points"></ul>
+      <button id="btn-to-quiz" class="btn primary big">我懂了，來答題</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 問答 ═══════════ -->
+<section id="scr-quiz" class="screen light">
+  <div class="pad">
+    <p class="kicker">闖關問答 · <span id="quiz-level"></span></p>
+    <h2 id="quiz-q" class="quiz-q"></h2>
+    <div id="quiz-opts" class="quiz-opts"></div>
+    <div id="quiz-fb" class="quiz-fb hidden"></div>
+    <button id="btn-quiz-next" class="btn primary big hidden">繼續</button>
+  </div>
+</section>
+
+<!-- ═══════════ 關卡總結 ═══════════ -->
+<section id="scr-lesson" class="screen dark">
+  <div class="deco-circle c1"></div>
+  <div class="pad center">
+    <div class="badge-pop">✓</div>
+    <p class="eyebrow" id="lesson-kicker"></p>
+    <h2 class="lesson-t" id="lesson-text"></h2>
+    <hr class="rule">
+    <p class="lesson-sub" id="lesson-sub"></p>
+    <button id="btn-lesson-next" class="btn primary big">前往下一關</button>
+  </div>
+</section>
+
+<!-- ═══════════ 全破總結 ═══════════ -->
+<section id="scr-finish" class="screen light">
+  <div class="pad">
+    <p class="kicker">MISSION COMPLETE</p>
+    <h2 class="page-title">恭喜全破！</h2>
+    <p class="page-sub" id="finish-sub"></p>
+
+    <div id="badge" class="badge-card">
+      <div class="badge-ring">
+        <img id="badge-hero" class="badge-hero" alt="">
+      </div>
+      <div class="badge-txt">
+        <p class="badge-title">花蓮綠色化學闖關</p>
+        <p class="badge-name" id="badge-name"></p>
+        <p class="badge-meta" id="badge-meta"></p>
+        <p class="badge-org">國立東華大學自然資源與環境學系<br>仿生與環境工作坊</p>
+      </div>
+    </div>
+
+    <h3 class="sec-h">五個帶走的概念</h3>
+    <div id="summary-list" class="summary-list"></div>
+
+    <h3 class="sec-h">你在每一關學到的</h3>
+    <ul id="lesson-recap" class="recap"></ul>
+
+    <button id="btn-share" class="btn primary big">分享我的完成徽章</button>
+    <button id="btn-restart" class="btn ghost">再玩一次</button>
+    <p class="foot">全部插畫、圖表與角色皆為本專案自繪，零版權素材。</p>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+</body>
+</html>

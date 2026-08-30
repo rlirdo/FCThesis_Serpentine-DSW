@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>MindAR 逐關目標編譯器</title>
+<style>body{font-family:sans-serif;padding:24px;background:#0B1F3A;color:#fff}
+#log{white-space:pre-wrap;font:13px/1.6 monospace;background:#04121f;padding:12px;border-radius:8px;max-height:70vh;overflow:auto}</style>
+</head>
+<body>
+<h1>MindAR 逐關目標編譯器</h1>
+<p>每一關各編譯成獨立的 targets/levelNN.mind，讓手機每關只下載一個小檔。</p>
+<div id="log">等待載入函式庫…</div>
+<script src="../vendor/mindar-image-aframe.prod.js"></script>
+<script>
+const logEl = document.getElementById('log');
+const L = m => { logEl.textContent += '\n' + m; logEl.scrollTop = 1e9; };
+window.__done = false; window.__err = null; window.__sizes = [];
+
+const loadImg = src => new Promise((res, rej)=>{
+  const i = new Image(); i.crossOrigin='anonymous';
+  i.onload=()=>res(i); i.onerror=()=>rej(new Error('load fail '+src)); i.src=src;
+});
+
+(async ()=>{
+  try{
+    for(let n=1;n<=10;n++){
+      const id = String(n).padStart(2,'0');
+      const im = await loadImg('../assets/targets/level'+id+'.png');
+      const compiler = new window.MINDAR.IMAGE.Compiler();
+      const t0 = performance.now();
+      await compiler.compileImageTargets([im], ()=>{});
+      const buf = await compiler.exportData();
+      const r = await fetch('/__save/level'+id+'.mind', {method:'POST', body: buf});
+      await r.text();
+      window.__sizes.push(buf.byteLength);
+      L('level'+id+'.mind  '+(buf.byteLength/1024).toFixed(0)+' KB  ('+((performance.now()-t0)/1000).toFixed(1)+'s)');
+    }
+    L('全部完成。總計 '+(window.__sizes.reduce((a,b)=>a+b,0)/1048576).toFixed(2)+' MB');
+    window.__done = true;
+  }catch(e){ window.__err = String(e&&e.stack||e); L('錯誤：'+window.__err); window.__done = true; }
+})();
+</script>
+</body>
+</html>

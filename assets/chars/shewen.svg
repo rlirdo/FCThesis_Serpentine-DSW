@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 170" width="120" height="170">
+  <title>蛇紋獸</title>
+  <defs>
+    <linearGradient id="swBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3E7F63"/><stop offset="1" stop-color="#1F5240"/>
+    </linearGradient>
+    <linearGradient id="swScale" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7CC0A2"/><stop offset=".5" stop-color="#2E7D5B"/><stop offset="1" stop-color="#163D2E"/>
+    </linearGradient>
+    <pattern id="swVein" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#2E7D5B"/>
+      <path d="M-2 4 q5-5 9 0 t9 0" stroke="#8FD3B2" stroke-width="1.4" fill="none" opacity=".8"/>
+      <path d="M-2 10 q5 5 9 0 t9 0" stroke="#123A2B" stroke-width="1.4" fill="none" opacity=".8"/>
+    </pattern>
+  </defs>
+  <ellipse cx="60" cy="163" rx="32" ry="6" fill="#0B1F3A" opacity=".18"/>
+  <!-- 尾巴（帶鱗片） -->
+  <path d="M84 132 q26 4 22-20 q-2-14 -14-12" stroke="url(#swScale)" stroke-width="13" fill="none" stroke-linecap="round"/>
+  <path d="M84 132 q26 4 22-20 q-2-14 -14-12" stroke="#163D2E" stroke-width="2" fill="none" stroke-dasharray="5 6"/>
+  <!-- 腳 -->
+  <rect x="44" y="132" width="14" height="24" rx="7" fill="#1F5240"/>
+  <rect x="62" y="132" width="14" height="24" rx="7" fill="#2A6A52"/>
+  <ellipse cx="51" cy="157" rx="11" ry="6" fill="#C99A3E"/>
+  <ellipse cx="69" cy="157" rx="11" ry="6" fill="#B4882F"/>
+  <!-- 身體 -->
+  <path d="M36 74 q24-12 48 0 l4 52 q-28 10 -56 0 z" fill="url(#swBody)"/>
+  <!-- 蛇紋石鱗片列 -->
+  <g stroke="#163D2E" stroke-width="1.6">
+    <path d="M38 84 q22-11 44 0 q-22 11 -44 0z" fill="url(#swVein)"/>
+    <path d="M39 98 q21-11 42 0 q-21 11 -42 0z" fill="url(#swVein)"/>
+    <path d="M40 112 q20-11 40 0 q-20 11 -40 0z" fill="url(#swVein)"/>
+    <path d="M42 125 q18-10 36 0 q-18 10 -36 0z" fill="url(#swVein)"/>
+  </g>
+  <!-- 胸口能量核心：OH 門把 -->
+  <circle cx="60" cy="99" r="10.5" fill="#0B1F3A" stroke="#C99A3E" stroke-width="2.5"/>
+  <text x="60" y="103" font-size="9" font-weight="bold" text-anchor="middle" fill="#FFD98A" font-family="sans-serif">OH</text>
+  <!-- 手臂 -->
+  <rect x="24" y="78" width="13" height="36" rx="6.5" fill="#2A6A52"/>
+  <rect x="83" y="78" width="13" height="36" rx="6.5" fill="#2A6A52"/>
+  <circle cx="30" cy="118" r="8" fill="#C99A3E" stroke="#163D2E" stroke-width="1.6"/>
+  <circle cx="89" cy="118" r="8" fill="#C99A3E" stroke="#163D2E" stroke-width="1.6"/>
+  <!-- 頭 -->
+  <path d="M60 42 q26 0 27 20 q1 16 -27 16 q-28 0 -27-16 q1-20 27-20z" fill="url(#swBody)"/>
+  <path d="M34 52 q26-16 52 0 q-26 8 -52 0z" fill="url(#swVein)" stroke="#163D2E" stroke-width="1.4"/>
+  <!-- 天線 -->
+  <path d="M46 44 l-6-14" stroke="#C99A3E" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="40" cy="28" r="5" fill="#FFD98A" stroke="#163D2E" stroke-width="1.6"/>
+  <path d="M74 44 l6-14" stroke="#C99A3E" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="80" cy="28" r="5" fill="#9FE0EF" stroke="#163D2E" stroke-width="1.6"/>
+  <!-- 眼罩式護目鏡 -->
+  <rect x="38" y="60" width="44" height="15" rx="7.5" fill="#0B1F3A" stroke="#7CC0A2" stroke-width="2"/>
+  <ellipse cx="50" cy="67.5" rx="5" ry="4.6" fill="#9FE0EF"/>
+  <ellipse cx="70" cy="67.5" rx="5" ry="4.6" fill="#9FE0EF"/>
+  <circle cx="51.6" cy="66" r="1.6" fill="#fff"/>
+  <circle cx="71.6" cy="66" r="1.6" fill="#fff"/>
+  <!-- 吻部 -->
+  <path d="M52 78 q8 7 16 0 q-8 5 -16 0z" fill="#C99A3E"/>
+  <circle cx="56" cy="79" r="1.3" fill="#163D2E"/>
+  <circle cx="64" cy="79" r="1.3" fill="#163D2E"/>
+</svg>
