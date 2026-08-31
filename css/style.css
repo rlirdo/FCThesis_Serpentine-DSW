@@ -214,6 +214,50 @@ body.has-banner .hud-top{padding-top:calc(96px + var(--safe-t))}
   background:rgba(11,31,58,.78);padding:7px 15px;border-radius:999px}
 #btn-keep-wait{max-width:220px;margin:0;background:rgba(201,154,62,.92);color:#2A1F06;border-color:transparent}
 
+/* ── v1.2 掃描成功：綠色橫幅 ＋ 倒數 ＋ 大型主按鈕 ──
+   一律 position:fixed（.screen 沒有 transform／filter，不會被建立成新的
+   containing block），z-index 用 9000+ 確保壓過 a-scene、a-canvas、
+   MindAR overlay 與所有既有面板（最高原本是 .toast 的 100）。
+   本層只佔螢幕上下兩條，中間留空 → 掃到後的 4 秒仍看得見 3D 疊加內容。 */
+.ar-success{position:fixed;inset:0;z-index:9000;pointer-events:none}
+.ar-success.hidden{display:none}
+/* ★ 位置一律由靜態 CSS 決定，動畫只碰 box-shadow。
+   若動畫被凍結（分頁在背景、prefers-reduced-motion、低耗電模式），
+   會停在關鍵影格的起點；把位移寫進 keyframes 會讓主按鈕整個往下偏、
+   在手機上被裁掉。橫幅與按鈕都改成「發光呼吸」，凍結了也不影響版面。 */
+.ar-success-banner{position:fixed;left:50%;transform:translateX(-50%);
+  top:calc(14px + var(--safe-t));z-index:9001;
+  display:flex;align-items:center;gap:12px;max-width:min(92vw,470px);
+  background:linear-gradient(135deg,#2E7D5B,#3F9E72);color:#fff;
+  padding:13px 22px;border-radius:999px;
+  box-shadow:0 8px 30px rgba(46,125,91,.55),0 0 0 3px rgba(255,255,255,.28) inset;
+  animation:successGlow 1.15s ease-in-out infinite alternate}
+body.has-banner .ar-success-banner{top:calc(74px + var(--safe-t))}
+.ar-success-mark{font-size:19px;font-weight:800;letter-spacing:.03em;white-space:nowrap}
+.ar-success-count{font-size:15px;font-weight:800;color:#EAF7F0;
+  background:rgba(11,31,58,.42);border-radius:999px;padding:4px 13px;min-width:56px;
+  text-align:center;white-space:nowrap}
+.ar-success-count:empty{display:none}
+@keyframes successGlow{
+  from{box-shadow:0 8px 30px rgba(46,125,91,.55),0 0 0 3px rgba(255,255,255,.28) inset}
+  to{box-shadow:0 8px 34px rgba(46,125,91,.85),0 0 0 3px rgba(255,255,255,.55) inset}}
+
+.ar-success-btn{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(24px + var(--safe-b));z-index:9002;pointer-events:auto;
+  width:min(88vw,420px);min-height:64px;padding:18px 22px;
+  font-family:inherit;font-size:21px;font-weight:800;letter-spacing:.04em;
+  color:#fff;background:linear-gradient(135deg,#2E7D5B,#46A87C);
+  border:3px solid rgba(255,255,255,.7);border-radius:18px;cursor:pointer;
+  box-shadow:0 10px 34px rgba(0,0,0,.5),0 0 0 6px rgba(46,125,91,.22);
+  animation:teachGlow 1.15s ease-in-out infinite alternate}
+.ar-success-btn:active{box-shadow:0 4px 16px rgba(0,0,0,.5),0 0 0 3px rgba(46,125,91,.3)}
+@keyframes teachGlow{
+  from{box-shadow:0 10px 34px rgba(0,0,0,.5),0 0 0 6px rgba(46,125,91,.22)}
+  to{box-shadow:0 10px 34px rgba(0,0,0,.5),0 0 0 12px rgba(46,125,91,.34)}}
+
+@media (prefers-reduced-motion: reduce){
+  .ar-success-banner,.ar-success-btn{animation:none}}
+
 /* ── v1.1 診斷區塊 ── */
 .ar-warn{font-size:13px;line-height:1.75;color:#7A3126;background:#FBEDEA;
   border-left:5px solid #C0553F;border-radius:10px;padding:10px 12px;margin:0 0 12px}

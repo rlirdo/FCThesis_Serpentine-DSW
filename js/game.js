@@ -1,4 +1,4 @@
-/* 花蓮綠色化學闖關 — 主流程 */
+/* 花蓮綠色化學闖關 — 主流程 v1.2 */
 (function () {
   const D = window.GAME_DATA;
   const $ = s => document.querySelector(s);
@@ -245,6 +245,7 @@
   function enterAR() {
     const L = cur();
     stopLoop();
+    clearSuccess();
     $('#ar-intro-title').textContent = '關卡 ' + L.n + '：' + L.title;
     $('#fb-img').src = 'assets/targets/level' + String(L.n).padStart(2, '0') + '.png';
     $('#ar-intro').classList.remove('hidden');
@@ -252,6 +253,55 @@
     $('#ar-teach').classList.add('hidden');
     $('#ar-scanning').classList.add('hidden');
     show('scr-ar');
+  }
+
+  /* ═══════════ v1.2 掃描成功 → 教學 ═══════════
+     v1.1 的斷點：AR.start() 把 onFound 存起來後才 await stop({keepStream:true})，
+     而 stop() 會無條件清掉 callback，於是 MindAR 讓 3D 內容浮現、遊戲卻停在原地。
+     ar.js 已修好銜接；這裡把「掃到之後」做成明確、不會漏接的兩條路：
+       ・4 秒倒數自動進入（橫幅顯示 4…3…2…1）
+       ・隨時可按底部大按鈕「進入教學 ▶」立刻進入
+     targetLost 一律不重置倒數、不收回按鈕 —— 掃到就算數。 */
+  const AUTO_SEC = 4;
+  const SUC = { timer: 0, left: 0, level: null, entering: false, foundAt: 0 };
+
+  function clearSuccess() {
+    if (SUC.timer) { clearInterval(SUC.timer); SUC.timer = 0; }
+    SUC.left = 0; SUC.level = null; SUC.entering = false; SUC.foundAt = 0;
+    $('#ar-success').classList.add('hidden');
+    $('#ar-success-count').textContent = '';
+  }
+
+  /* targetFound 的唯一入口。注意：這裡刻意「不」呼叫 AR.stop()，
+     讓 3D 疊加內容在倒數的 4 秒內繼續顯示給玩家看。 */
+  function scanSuccess(L) {
+    if (SUC.level || SUC.entering) return;      // 只認第一次
+    SUC.level = L || cur();
+    SUC.foundAt = Date.now();
+    stopHealthCheck();
+    $('#ar-scanning').classList.add('hidden');  // 收起準心，露出 AR 疊加畫面
+    $('#ar-success').classList.remove('hidden');
+    try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) { /* 不支援就略過 */ }
+    SUC.left = AUTO_SEC;
+    $('#ar-success-count').textContent = SUC.left + '…';
+    SUC.timer = setInterval(() => {
+      SUC.left--;
+      if (SUC.left <= 0) { enterTeachFromScan(); return; }
+      $('#ar-success-count').textContent = SUC.left + '…';
+    }, 1000);
+  }
+
+  /* 進教學：先徹底停掉 MindAR 與相機串流（相機燈熄滅），再顯示教學面板。 */
+  async function enterTeachFromScan() {
+    if (SUC.entering) return;
+    SUC.entering = true;
+    if (SUC.timer) { clearInterval(SUC.timer); SUC.timer = 0; }
+    const L = SUC.level || cur();
+    $('#ar-success').classList.add('hidden');
+    $('#ar-success-count').textContent = '';
+    try { await AR.stop(); } catch (e) { console.warn('[AR] stop on teach', e); }
+    showTeach(L);
+    SUC.level = null; SUC.entering = false; SUC.left = 0;
   }
 
   /* ── 掃描面板的狀態列 ── */
@@ -332,6 +382,7 @@
   /* ── A. 相機預檢：按鈕手勢內立刻 getUserMedia，再背景載 .mind ── */
   async function startCamera() {
     const L = cur();
+    clearSuccess();
     $('#ar-intro').classList.add('hidden');
     $('#ar-fallback').classList.add('hidden');
     $('#ar-scanning').classList.remove('hidden');
@@ -375,7 +426,9 @@
     try {
       await AR.start(L, {
         host: $('#ar-host'), stream: stream, mindSrc: mindSrc,
-        onFound: () => { AR.stop(); showTeach(L); }
+        onFound: () => scanSuccess(L),
+        // v1.2：追蹤中斷刻意不做任何事 —— 已經掃到就算數，手持晃動不懲罰玩家
+        onLost: () => { /* no-op by design */ }
       });
       await AR.repatch();               // B. 每次進掃描都強制修補 video
     } catch (e) {
@@ -522,14 +575,17 @@
       $('#ar-fallback').classList.remove('hidden');
     });
     $('#btn-ar-back').addEventListener('click', async () => {
-      stopHealthCheck(); await AR.stop(); show('scr-explore'); startLoop();
+      stopHealthCheck(); clearSuccess(); await AR.stop(); show('scr-explore'); startLoop();
     });
     $('#btn-scan-cancel').addEventListener('click', async () => {
       stopHealthCheck();
+      clearSuccess();
       await AR.stop();
       $('#ar-scanning').classList.add('hidden');
       $('#ar-intro').classList.remove('hidden');
     });
+    // v1.2 掃描成功後的大型主按鈕：立刻進入教學（不必等倒數跑完）
+    $('#btn-ar-teach').addEventListener('click', enterTeachFromScan);
     $('#btn-keep-wait').addEventListener('click', () => {
       if (!healthCheck._keep) return;                   // 倒數已結束就別再給假回饋
       healthCheck._keep();                              // 倒數歸零重數
@@ -555,9 +611,9 @@
     bindDpad();
     addEventListener('resize', relayoutExplore);
     addEventListener('orientationchange', () => setTimeout(relayoutExplore, 250));
-    addEventListener('pagehide', () => { stopHealthCheck(); AR.stop(); });
+    addEventListener('pagehide', () => { stopHealthCheck(); clearSuccess(); AR.stop(); });
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { stopHealthCheck(); AR.stop(); }
+      if (document.hidden) { stopHealthCheck(); clearSuccess(); AR.stop(); }
     });
   }
 
@@ -622,7 +678,9 @@
     gotoLevel: n => { S.idx = S.queue.indexOf(n); enterLevel(); },
     // v1.1 相機診斷驗收用
     startCamera, failCamera, copyDiag, inAppBanner,
-    healthCheck, stopHealthCheck, scanStatus, scanHint, scanWait
+    healthCheck, stopHealthCheck, scanStatus, scanHint, scanWait,
+    // v1.2 掃描成功銜接驗收用
+    scanSuccess, enterTeachFromScan, clearSuccess, successState: () => Object.assign({}, SUC)
   };
 
   bind();

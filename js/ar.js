@@ -1,4 +1,16 @@
-/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.1
+/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.2
+   ── v1.2 修復「掃到圖但卡住不動」──────────────────────────────────
+   根因：start() 先把 opts.onFound 存進 onFoundCb，緊接著才呼叫
+   `await stop({ keepStream: true })` 清場，而 stop() 開頭無條件執行
+   `onFoundCb = null`，於是 callback 在 targetFound 真的發生前就被抹掉。
+   MindAR 仍會讓 3D 內容浮現（那是 mindar-image-target 元件自己做的），
+   但遊戲流程的銜接函式永遠不會被呼叫 →「3D 出來了，然後停在原地」。
+   修法：(1) stop({keepStream:true}) 不再清 callback；
+        (2) callback 一律在 stop() 之後才掛上；
+        (3) targetFound / targetLost 同時綁在 entity 與 a-scene 兩層
+            （冒泡重複由 foundFired 與 e.target 檢查濾掉）；
+        (4) 新增 onLost 與 simulateFound()，供自動化驗證。
+
    ── v1.1 相機可靠性大修 ──────────────────────────────────────────
    1. 【手勢鏈】按鈕 click 內「立刻」呼叫 getUserMedia，先把畫面接到自己的
       <video id="cam-preview">，使用者馬上看得到相機活著；.mind 在背景載入。
@@ -14,9 +26,12 @@
    5. 【內建瀏覽器】LINE 自動導向外部瀏覽器；FB / IG / 微信顯示逃生指引。 */
 window.AR = (function () {
 
-  const VERSION = '1.1';
+  const VERSION = '1.2';
 
-  let host = null, sceneEl = null, running = false, onFoundCb = null, mo = null;
+  let host = null, sceneEl = null, running = false, mo = null;
+  let onFoundCb = null, onLostCb = null;
+  let foundFired = false;        // 本次掃描是否已認定「掃到了」（entity/scene 雙綁去重）
+  let targetEl = null;           // 目前的 #ar-target，供 simulateFound() 派發事件
   let camStream = null;          // 預檢取得、之後交給 MindAR 的同一條串流
   let previewEl = null;          // 我們自己的 <video id="cam-preview">
   let mindVideo = null;          // MindAR 建立的 <video>
@@ -38,7 +53,10 @@ window.AR = (function () {
     paused: null,
     readyState: null,
     trackLabel: null,
-    trackSettings: null
+    trackSettings: null,
+    targetFound: 0,          // v1.2：targetFound 實際觸發次數
+    targetLost: 0,
+    foundCallback: null      // v1.2：'fired' / 'missing'
   };
 
   function log(...a) { console.log('[AR]', ...a); }
@@ -284,6 +302,8 @@ window.AR = (function () {
     L.push('影像尺寸：' + diag.videoW + ' × ' + diag.videoH);
     L.push('畫面平均亮度：' + diag.brightness + '（<6 視為全黑）');
     L.push('video.paused：' + diag.paused + '　readyState：' + diag.readyState);
+    L.push('targetFound 次數：' + diag.targetFound + '　targetLost 次數：' + diag.targetLost +
+           '　銜接 callback：' + (diag.foundCallback || '（尚未觸發）'));
     const st = selfTest();
     L.push('A-Frame：' + (st.aframe ? st.aframeVersion : '未載入') +
            '　MindAR：' + (st.mindar ? 'OK' : '未載入'));
@@ -356,11 +376,21 @@ window.AR = (function () {
     if (!pf.ok) { const e = new Error(pf.reason); e.__info = pf; throw e; }
 
     host = opts.host;
-    onFoundCb = opts.onFound;
     const mindSrc = opts.mindSrc || targetPath(level);
     if (opts.stream) camStream = opts.stream;
 
     await stop({ keepStream: true });
+
+    /* ★ v1.2 根因修正：callback 一定要在 stop() 之後才掛。
+       v1.1 是先設 onFoundCb 再 await stop()，而 stop() 開頭會把它清成 null，
+       導致 targetFound 真的發生時已經沒有 callback 可呼叫。 */
+    onFoundCb = opts.onFound || null;
+    onLostCb = opts.onLost || null;
+    foundFired = false;
+    diag.targetFound = 0;
+    diag.targetLost = 0;
+    diag.foundCallback = null;
+
     mo = watchVideos();
     diag.stage = 'sceneLoad';
 
@@ -386,12 +416,38 @@ window.AR = (function () {
 
     host.appendChild(sceneEl);
 
+    /* ── v1.2 事件銜接：entity 與 a-scene 兩層都綁 ──
+       A-Frame 的 emit 預設會冒泡，所以 entity 發出的事件也會被 scene 收到；
+       用 foundFired 與 e.target 檢查去重，同時涵蓋「事件只發在 scene 上」的版本差異。 */
     const tgt = sceneEl.querySelector('#ar-target');
-    tgt.addEventListener('targetFound', () => {
-      log('targetFound level', level.n);
-      if (onFoundCb) { const cb = onFoundCb; onFoundCb = null; cb(); }
-    });
-    tgt.addEventListener('targetLost', () => log('targetLost'));
+    targetEl = tgt;
+
+    const fireFound = src => {
+      diag.targetFound++;
+      log('targetFound level', level.n, '(via ' + src + ')');
+      if (foundFired) return;                 // 一次掃描只認第一次
+      foundFired = true;
+      if (!onFoundCb) {
+        diag.foundCallback = 'missing';
+        log('⚠ targetFound 觸發但沒有 onFound callback');
+        return;
+      }
+      diag.foundCallback = 'fired';
+      /* 注意：這裡「不」清掉 onFoundCb，改由 foundFired 控制次數，
+         以免像 v1.1 那樣被生命週期呼叫順序意外抹掉。 */
+      try { onFoundCb(); } catch (e) { log('onFound callback error', e); }
+    };
+    const fireLost = src => {
+      diag.targetLost++;
+      log('targetLost (via ' + src + ')');
+      /* v1.2：追蹤中斷刻意不回收任何 UI —— 掃到就算數，手持晃動不懲罰玩家。 */
+      if (onLostCb) { try { onLostCb(); } catch (e) { log('onLost callback error', e); } }
+    };
+
+    tgt.addEventListener('targetFound', () => fireFound('entity'));
+    tgt.addEventListener('targetLost', () => fireLost('entity'));
+    sceneEl.addEventListener('targetFound', e => { if (e.target !== tgt) fireFound('scene'); });
+    sceneEl.addEventListener('targetLost', e => { if (e.target !== tgt) fireLost('scene'); });
 
     await new Promise(res => {
       if (sceneEl.hasLoaded) return res();
@@ -468,7 +524,10 @@ window.AR = (function () {
 
   async function stop(opts) {
     const keep = !!(opts && opts.keepStream);
-    onFoundCb = null;
+    /* v1.2：keepStream 代表「start() 內部的清場」，此時不可清掉 callback。
+       只有真正結束掃描（不保留串流）才把 callback 收回。 */
+    if (!keep) { onFoundCb = null; onLostCb = null; foundFired = false; }
+    targetEl = null;
     if (mo) { try { mo.disconnect(); } catch (e) {} mo = null; }
     if (sceneEl) {
       const sys = sceneEl.systems && sceneEl.systems['mindar-image-system'];
@@ -533,6 +592,24 @@ window.AR = (function () {
     mindReady: () => !!(mindVideo && mindVideo.isConnected && mindVideo.videoWidth > 0),
     prefetchTarget, targetPath,
     probe, resetProbe, brightnessOf, diagText, diagData,
+    /* ── v1.2 驗證掛鉤 ──
+       simulateFound('entity'|'scene') 直接在對應層派發真的 targetFound
+       CustomEvent，用來在沒有實體卡片的桌機上驗證整條銜接鏈。 */
+    simulateFound(where) {
+      const layer = (where === 'scene') ? sceneEl : (targetEl || sceneEl);
+      if (!layer) return false;
+      layer.dispatchEvent(new CustomEvent('targetFound', { bubbles: true }));
+      return true;
+    },
+    simulateLost(where) {
+      const layer = (where === 'scene') ? sceneEl : (targetEl || sceneEl);
+      if (!layer) return false;
+      layer.dispatchEvent(new CustomEvent('targetLost', { bubbles: true }));
+      return true;
+    },
+    hasFoundCallback: () => !!onFoundCb,
+    get sceneEl() { return sceneEl; },
+    get targetEl() { return targetEl; },
     get running() { return running; },
     get stream() { return camStream; }
   };

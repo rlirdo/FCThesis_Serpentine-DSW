@@ -140,6 +140,32 @@ Facebook／Instagram／微信的內建瀏覽器沒有等效參數，v1.1 會顯�
 
 ---
 
+## 掃描成功後的銜接（v1.2）
+
+v1.1 有一個致命的銜接錯誤：`AR.start()` 先把 `onFound` callback 存起來，
+接著才呼叫 `stop({ keepStream: true })` 清場，而 `stop()` 會把 callback 清成 `null`。
+結果 MindAR 照樣讓 3D 內容浮現（那是 `mindar-image-target` 元件自己做的），
+遊戲流程卻永遠不會前進 ——「掃到了，然後停在原地」。
+
+v1.2 的行為：
+
+| 時機 | 行為 |
+|---|---|
+| `targetFound` 觸發 | 上方跳出綠色橫幅「✓ 掃描成功！」＋ `navigator.vibrate(80)` 震動回饋 |
+| 同時 | 底部出現大型主按鈕「進入教學 ▶」（固定定位 DOM，z-index 9002，壓過 a-scene 全部層） |
+| 同時 | 啟動 **4 秒倒數**，橫幅顯示 `4…3…2…1`，倒數結束自動進入教學 |
+| 倒數期間 | **3D 疊加內容持續顯示**，讓玩家欣賞 AR 效果 |
+| `targetLost` | **不重置倒數、不收回按鈕** —— 掃到就算數，手持晃動不懲罰玩家 |
+| 進入教學時 | 才真正 `AR.stop()`：移除 a-scene、停掉所有 MediaStreamTrack（相機燈熄滅） |
+
+事件同時綁在 `#ar-target` entity 與 `a-scene` 兩層（冒泡由 `foundFired` 與
+`e.target` 檢查去重），避免 MindAR 版本差異造成漏接。
+
+> 排版原則：**主要行動按鈕的位置不可依賴 CSS 動畫跑完**。
+> 分頁在背景、`prefers-reduced-motion`、低耗電模式都會凍結動畫；
+> 若把位移寫進 keyframes，按鈕會停在起始位移上被畫面裁掉。
+> v1.2 的橫幅與按鈕位置一律由靜態 CSS 決定，動畫只做 `box-shadow` 發光。
+
 ## 手機相容性處理（v1.1）
 
 | 項目 | 做法 |
@@ -158,7 +184,7 @@ Facebook／Instagram／微信的內建瀏覽器沒有等效參數，v1.1 會顯�
 | 無相機／不授權 | 提供「圖片模式」與「直接答題」，**沒有相機也能完整玩完**（教學場域的無障礙需求） |
 | 觸控 | 所有按鈕 ≥ 44 px；方向鍵 64 px |
 | 瀏海／安全區 | `viewport-fit=cover` ＋ `env(safe-area-inset-*)` |
-| 版本可視化 | 開場頁右下角顯示 `v1.1`；`index.html` 對 js/css 加 `?v=1.1` 破快取 |
+| 版本可視化 | 開場頁右下角顯示 `v1.2`；`index.html` 對 js/css 加 `?v=1.2` 破快取 |
 
 內建瀏覽器偵測與 LINE 逃生網址已抽成純函式（`AR.detectInApp(ua)` / `AR.externalBrowserUrl(href, ua)`），
 可離線單元測試：
