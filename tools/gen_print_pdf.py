@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""把 10 張關卡關鍵圖片排成 A4 列印稿（每頁 2 張，含關卡編號與掃描說明）。
+"""把關鍵圖片排成 A4 列印稿。
+第 1 頁 ＝ 遊戲萬用卡（放大版，一張卡玩全程），第 2 頁起才是十張關卡卡（每頁 2 張）。
 輸出：print/關鍵圖片列印稿.pdf
 """
 import os
@@ -82,18 +83,63 @@ def card(page_img, d, n, title, sub, top):
     cy = iy + IMG_SIDE + 26
     d.text((L, cy), "掃描方式：遊戲中走到目標點後按「開始掃描」，讓整張圖填滿手機畫面即可辨識。",
            font=F(26, False), fill=DARK, anchor="lt")
-    d.text((L, cy + 42), "關卡 %d 專用　｜　請平放於光線充足處，避免反光與陰影" % n,
+    d.text((L, cy + 42), "關卡 %d 專用　｜　不想換圖的話，掃第 1 頁的「遊戲萬用卡」也可以過關" % n,
            font=F(24, False), fill=GREY, anchor="lt")
     return top + CARD_H
 
 
+GREEN = (46, 125, 91)
+MOSS = (95, 169, 138)
+
+
+def universal_page(page, total):
+    """第 1 頁：遊戲萬用卡放大版 ＋「一張卡玩全程」說明。
+    整場只印這一張、只帶這一張，就能從第 1 關掃到第 10 關。"""
+    img = Image.new("RGB", A4, WHITE)
+    d = ImageDraw.Draw(img)
+    page_header(d, page, total)
+
+    # 標題列（森綠，和關卡卡的 navy 標題列一眼分得出來）
+    y = 268
+    d.rounded_rectangle([150, y, A4[0] - 150, y + 190], 22, fill=GREEN)
+    d.text((196, y + 62), "遊戲萬用卡", font=F(72), fill=WHITE, anchor="lm")
+    d.text((196, y + 138), "UNIVERSAL CARD　一張卡玩全程", font=F(36, False), fill=(206, 236, 220), anchor="lm")
+    d.rounded_rectangle([A4[0] - 700, y + 34, A4[0] - 176, y + 156], 18, fill=GOLD)
+    d.text((A4[0] - 438, y + 95), "只要印這一張", font=F(44), fill=NAVY, anchor="mm")
+
+    # 放大版萬用卡（≒ 160 mm 見方，比關卡卡大，好掃也好看）
+    side = 1890
+    L = (A4[0] - side) // 2
+    iy = y + 190 + 44
+    src = Image.open(os.path.join(SRC, "universal.png")).convert("RGB").resize((side, side), Image.LANCZOS)
+    img.paste(src, (L, iy))
+    d.rectangle([L - 4, iy - 4, L + side + 4, iy + side + 4], outline=(150, 160, 168), width=4)
+
+    # 說明區
+    ey = iy + side + 42
+    d.rounded_rectangle([150, ey, A4[0] - 150, ey + 400], 20, fill=(240, 247, 244), outline=GREEN, width=4)
+    d.text((196, ey + 56), "怎麼用這一張卡", font=F(42), fill=GREEN, anchor="lm")
+    lines = [
+        "1. 每一關按「開始掃描」後，選「掃描卡片」，把這一張卡填滿手機畫面即可。",
+        "2. 第 1 關到第 10 關都掃同一張，不必每過一關回去換一張圖。",
+        "3. 想要每關不同的圖也可以：後面十張是各關專屬卡片，兩種掃法都會過關。",
+        "4. 手邊完全沒有卡片時，遊戲裡還有「免卡體驗」可以直接開相機看內容。",
+    ]
+    for i, t in enumerate(lines):
+        d.text((196, ey + 130 + i * 62), t, font=F(30, False), fill=DARK, anchor="lm")
+
+    page_footer(d)
+    return img
+
+
 def build():
     pages = []
-    total = (len(TITLES) + 1) // 2
-    for p in range(total):
+    total = 1 + (len(TITLES) + 1) // 2          # 第 1 頁是萬用卡
+    pages.append(universal_page(1, total))
+    for p in range(total - 1):
         img = Image.new("RGB", A4, WHITE)
         d = ImageDraw.Draw(img)
-        page_header(d, p + 1, total)
+        page_header(d, p + 2, total)
         y = 270
         for k in range(2):
             i = p * 2 + k

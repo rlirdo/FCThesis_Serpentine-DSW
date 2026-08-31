@@ -7,14 +7,14 @@
 <meta name="description" content="花蓮綠色化學闖關 — 手機 WebAR 教學遊戲｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>花蓮綠色化學闖關</title>
-<link rel="stylesheet" href="css/style.css?v=1.2">
+<link rel="stylesheet" href="css/style.css?v=1.3">
 <!-- A-Frame 必須先於 MindAR；全部 defer，順序保留且不阻擋載入畫面繪製 -->
 <script defer src="vendor/aframe.min.js"></script>
 <script defer src="vendor/mindar-image-aframe.prod.js"></script>
-<script defer src="js/data.js?v=1.2"></script>
-<script defer src="js/visuals.js?v=1.2"></script>
-<script defer src="js/ar.js?v=1.2"></script>
-<script defer src="js/game.js?v=1.2"></script>
+<script defer src="js/data.js?v=1.3"></script>
+<script defer src="js/visuals.js?v=1.3"></script>
+<script defer src="js/ar.js?v=1.3"></script>
+<script defer src="js/game.js?v=1.3"></script>
 </head>
 <body>
 
@@ -32,7 +32,7 @@
     <p class="load-sub">HUALIEN GREEN CHEMISTRY QUEST</p>
     <p id="load-msg" class="load-msg">正在準備素材…</p>
   </div>
-  <span class="ver-tag">v1.2</span>
+  <span class="ver-tag">v1.3</span>
 </section>
 
 <!-- ═══════════ 標題頁 ═══════════ -->
@@ -52,8 +52,9 @@
     <p class="byline">國立東華大學自然資源與環境學系<br>指導教授：楊悠娟 教授　｜　製作：游豐兆 博士生</p>
     <button id="btn-start" class="btn primary big">開始冒險</button>
     <button id="btn-howto" class="btn ghost">怎麼玩？</button>
+    <a class="btn ghost" href="cards.html">卡片輪播（第二台裝置顯示卡片）</a>
   </div>
-  <span class="ver-tag">v1.2</span>
+  <span class="ver-tag">v1.3</span>
 </section>
 
 <!-- ═══════════ 玩法說明 ═══════════ -->
@@ -65,15 +66,23 @@
       <li><b>選主角</b>：阿海、小玉、蛇紋獸，三選一。</li>
       <li><b>選關卡數</b>：5 關（精華版）或 10 關（完整版）。</li>
       <li><b>探索模式</b>：用畫面下方的方向鍵移動主角，走到會發光的目標點。</li>
-      <li><b>AR 掃描</b>：按「開始掃描」開啟後鏡頭，對準該關的<b>關鍵圖片</b>（列印稿在 print 資料夾）。</li>
+      <li><b>三種玩法</b>：每一關按「開始掃描」後可以選——<br>
+        <b>① 掃描卡片</b>：掃<b>遊戲萬用卡</b>（一張卡玩到底）或該關的專屬卡片，兩種都會過關。<br>
+        <b>② 免卡體驗</b>：手邊沒有卡片時，開後鏡頭把教學內容疊在實景上，還能拍照留念。<br>
+        <b>③ 跳過直接答題</b>：不開相機，直接看教學並作答。</li>
       <li><b>答題過關</b>：教學內容浮現後回答一題；答錯會給提示，可以重試。</li>
-      <li><b>沒有相機也能玩</b>：可改用「圖片模式」或直接跳過掃描作答。</li>
+      <li><b>第二台裝置當卡片</b>：開 <a href="cards.html">卡片輪播頁</a>，用另一支手機／平板／筆電顯示卡片給這一台掃。</li>
     </ol>
+    <div class="note">
+      <b>萬用卡</b>：列印稿的<b>第 1 頁</b>就是萬用卡。整場只印這一張、只拿這一張，
+      就可以從第 1 關掃到第 10 關，不必每過一關換一張圖。
+    </div>
     <div class="note">
       <b>相機說明</b>：本遊戲需要使用手機的<b>後鏡頭</b>來辨識圖片。影像只在你的手機上即時處理，
       <b>不會上傳、不會儲存</b>。首次使用瀏覽器會詢問相機權限，請點「允許」。
     </div>
     <button class="btn primary big" data-go="scr-title">回到首頁</button>
+    <a class="btn ghost" href="cards.html">開啟卡片輪播頁</a>
   </div>
 </section>
 
@@ -142,17 +151,44 @@
   <video id="cam-preview" class="cam-preview hidden" playsinline webkit-playsinline muted autoplay></video>
   <div id="ar-host"></div>
 
+  <!-- v1.3：三個明確模式取代 v1.2 的「開相機 ／ 沒有相機」二選一。
+       上一次用過的模式會被高亮並標示「上次用這個」，但玩家隨時可以改。 -->
   <div id="ar-intro" class="ar-panel">
     <div class="ar-card">
       <p class="kicker">AR SCAN</p>
       <h3 id="ar-intro-title">準備掃描</h3>
-      <p class="ar-p">請把<b>關卡關鍵圖片</b>平放在桌面或牆上，光線充足，
-        然後按下方按鈕開啟<b>後鏡頭</b>，讓整張圖填滿畫面。</p>
+      <p id="ar-lead" class="ar-lead"></p>
+      <div class="mode-picker">
+        <button id="btn-mode-scan" class="mode-btn" data-mode="scan">
+          <span class="mode-ico">📷</span>
+          <span class="mode-body">
+            <span class="mode-main">掃描卡片</span>
+            <span class="mode-sub">本關卡片或萬用卡皆可</span>
+          </span>
+          <span class="mode-last">上次用這個</span>
+        </button>
+        <button id="btn-mode-nocard" class="mode-btn" data-mode="nocard">
+          <span class="mode-ico">✨</span>
+          <span class="mode-body">
+            <span class="mode-main">免卡體驗</span>
+            <span class="mode-sub">開相機直接看內容，手邊沒有卡片也能玩</span>
+          </span>
+          <span class="mode-last">上次用這個</span>
+        </button>
+        <button id="btn-mode-skip" class="mode-btn" data-mode="skip">
+          <span class="mode-ico">▶</span>
+          <span class="mode-body">
+            <span class="mode-main">跳過直接答題</span>
+            <span class="mode-sub">不開相機，直接看教學內容並作答</span>
+          </span>
+          <span class="mode-last">上次用這個</span>
+        </button>
+      </div>
       <p class="ar-warn">若你是從 <b>LINE／Facebook／Instagram</b> 點開本頁，相機會被那些 App 的內建瀏覽器封鎖，
         請改用 <b>Safari</b>（iPhone）或 <b>Chrome</b>（Android）開啟。</p>
       <p class="ar-note">影像只在你的裝置上即時處理，不會上傳、不會儲存。</p>
-      <button id="btn-cam" class="btn primary big">開始掃描（開啟相機）</button>
-      <button id="btn-nocam" class="btn ghost">沒有相機／不方便掃描</button>
+      <p class="ar-note">第二台裝置請開 <a href="cards.html" target="_blank" rel="noopener">cards.html</a> 顯示卡片，
+        用另一支手機、平板或筆電當卡片給這一台掃。</p>
       <button id="btn-ar-back" class="btn ghost small">回到探索</button>
     </div>
   </div>
@@ -172,10 +208,40 @@
        3D 疊加內容仍看得見（本層只佔上下兩條），4 秒後自動進入教學。 -->
   <div id="ar-success" class="ar-success hidden">
     <div class="ar-success-banner">
-      <span class="ar-success-mark">✓ 掃描成功！</span>
+      <span id="ar-success-mark" class="ar-success-mark">✓ 掃描成功！</span>
       <span id="ar-success-count" class="ar-success-count"></span>
     </div>
     <button id="btn-ar-teach" class="ar-success-btn">進入教學 ▶</button>
+  </div>
+
+  <!-- ═══ v1.3 免卡體驗層 ═══
+       不需要 MindAR、不需要任何錨定：後鏡頭實景全螢幕，教學內容以半透明底板
+       疊在畫面中央（輕微上下浮動）。位置一律由靜態 CSS 決定，動畫只做位移點綴，
+       所以就算動畫被系統凍結（省電模式／prefers-reduced-motion）版面也不會跑掉。 -->
+  <div id="ar-nocard" class="nocard-layer hidden">
+    <div id="nocard-tilt" class="nocard-tilt">
+      <div id="nocard-card" class="nocard-card">
+        <p class="nocard-kicker" id="nocard-kicker"></p>
+        <h3 id="nocard-title" class="nocard-title"></h3>
+        <div id="nocard-visual" class="nocard-visual"></div>
+        <ul id="nocard-points" class="nocard-points"></ul>
+      </div>
+    </div>
+    <div class="nocard-bar">
+      <button id="btn-nocard-shot" class="btn nocard-shot">📸 拍下學習瞬間</button>
+      <button id="btn-nocard-go" class="btn nocard-go">繼續 ▶</button>
+    </div>
+    <button id="btn-nocard-back" class="btn ghost small nocard-back">回到選單</button>
+
+    <div id="nocard-photo" class="nocard-photo hidden">
+      <div class="nocard-photo-inner">
+        <p class="nocard-photo-t">學習瞬間已拍好</p>
+        <img id="nocard-photo-img" alt="學習瞬間合成照片">
+        <p class="nocard-photo-tip" id="nocard-photo-tip">手機請<b>長按圖片</b>選「儲存影像」；電腦可按下方按鈕下載。</p>
+        <a id="nocard-dl" class="btn primary" download="花蓮綠色化學闖關.png">下載照片</a>
+        <button id="btn-nocard-photo-close" class="btn ghost">關閉</button>
+      </div>
+    </div>
   </div>
 
   <div id="ar-fallback" class="ar-panel hidden">

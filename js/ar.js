@@ -1,4 +1,15 @@
-/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.2
+/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.3
+   ── v1.3 萬用卡：每一關都是「雙目標」──────────────────────────────
+   問題：v1.2 每關只有一個 target，玩家每過一關就得回筆電換一張圖才能掃，
+        體驗在關與關之間被硬生生切斷。
+   作法：每個 levelNN.mind 內含兩個 target ——
+          target 0 ＝ 該關專屬關鍵圖片
+          target 1 ＝ 遊戲萬用卡（universal.png）
+        場景同時掛兩個 <a-entity mindar-image-target>，targetIndex 0 與 1，
+        兩者都放「該關」的 3D 教學內容，且兩者的 targetFound 都接到同一個
+        scanSuccess。因此玩家可以整場只拿萬用卡，一張卡從第 1 關玩到第 10 關。
+   diag.foundIndex 會記錄實際是哪一個 target 觸發（0 = 關卡卡、1 = 萬用卡）。
+
    ── v1.2 修復「掃到圖但卡住不動」──────────────────────────────────
    根因：start() 先把 opts.onFound 存進 onFoundCb，緊接著才呼叫
    `await stop({ keepStream: true })` 清場，而 stop() 開頭無條件執行
@@ -26,12 +37,13 @@
    5. 【內建瀏覽器】LINE 自動導向外部瀏覽器；FB / IG / 微信顯示逃生指引。 */
 window.AR = (function () {
 
-  const VERSION = '1.2';
+  const VERSION = '1.3';
 
   let host = null, sceneEl = null, running = false, mo = null;
   let onFoundCb = null, onLostCb = null;
   let foundFired = false;        // 本次掃描是否已認定「掃到了」（entity/scene 雙綁去重）
-  let targetEl = null;           // 目前的 #ar-target，供 simulateFound() 派發事件
+  let targetEl = null;           // target 0（該關專屬卡），供 simulateFound() 派發事件
+  let uniEl = null;              // target 1（萬用卡）
   let camStream = null;          // 預檢取得、之後交給 MindAR 的同一條串流
   let previewEl = null;          // 我們自己的 <video id="cam-preview">
   let mindVideo = null;          // MindAR 建立的 <video>
@@ -56,10 +68,25 @@ window.AR = (function () {
     trackSettings: null,
     targetFound: 0,          // v1.2：targetFound 實際觸發次數
     targetLost: 0,
-    foundCallback: null      // v1.2：'fired' / 'missing'
+    foundCallback: null,     // v1.2：'fired' / 'missing'
+    foundIndex: null,        // v1.3：實際觸發的 targetIndex（0 = 關卡卡、1 = 萬用卡）
+    mindTargets: null        // v1.3：本關 .mind 內的 target 數（預期 2）
   };
 
   function log(...a) { console.log('[AR]', ...a); }
+
+  /* 從事件來源元素反查它是哪一個 targetIndex（scene 層補接時用）。
+     取不到就回 null，流程照走 —— 索引只是診斷資訊，不影響銜接。 */
+  function indexOfTargetEl(el) {
+    try {
+      if (!el || !el.getAttribute) return null;
+      const a = el.getAttribute('mindar-image-target');
+      if (!a) return null;
+      const v = (typeof a === 'object') ? a.targetIndex : String(a).replace(/[^\d]/g, '');
+      const n = parseInt(v, 10);
+      return isNaN(n) ? null : n;
+    } catch (e) { return null; }
+  }
 
   /* ═══════════ C. 內建瀏覽器（in-app WebView）偵測 ═══════════
      純函式，只吃 UA 字串，方便單元測試。 */
@@ -304,6 +331,10 @@ window.AR = (function () {
     L.push('video.paused：' + diag.paused + '　readyState：' + diag.readyState);
     L.push('targetFound 次數：' + diag.targetFound + '　targetLost 次數：' + diag.targetLost +
            '　銜接 callback：' + (diag.foundCallback || '（尚未觸發）'));
+    L.push('觸發的目標：' + (diag.foundIndex === null ? '（尚未觸發）'
+           : (diag.foundIndex === 1 ? '萬用卡（target 1）'
+              : diag.foundIndex === 0 ? '本關卡片（target 0）' : 'target ' + diag.foundIndex)) +
+           '　.mind 目標數：' + (diag.mindTargets === null ? '未檢查' : diag.mindTargets));
     const st = selfTest();
     L.push('A-Frame：' + (st.aframe ? st.aframeVersion : '未載入') +
            '　MindAR：' + (st.mindar ? 'OK' : '未載入'));
@@ -390,6 +421,7 @@ window.AR = (function () {
     diag.targetFound = 0;
     diag.targetLost = 0;
     diag.foundCallback = null;
+    diag.foundIndex = null;
 
     mo = watchVideos();
     diag.stage = 'sceneLoad';
@@ -404,29 +436,39 @@ window.AR = (function () {
     sceneEl.setAttribute('device-orientation-permission-ui', 'enabled: false');
     sceneEl.setAttribute('embedded', '');
 
+    /* ── v1.3：兩個 target 都掛上「該關」的 3D 內容 ──
+       target 0 是本關專屬卡，target 1 是萬用卡；掃到哪一張，浮現的都是本關內容。
+       所以玩家可以整場只拿萬用卡，不必每關回去換圖。 */
+    const content = VISUALS.ar3d(level.ar.visual);
+    const anchor = (id, index) =>
+      '<a-entity id="' + id + '" mindar-image-target="targetIndex: ' + index + '">' +
+      '<a-entity position="0 0 0" rotation="0 0 0" scale="0.8 0.8 0.8">' + content +
+      '</a-entity></a-entity>';
+
     sceneEl.innerHTML =
       '<a-assets></a-assets>' +
       '<a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false"></a-camera>' +
-      '<a-entity id="ar-target" mindar-image-target="targetIndex: 0">' +
-      '<a-entity position="0 0 0" rotation="0 0 0" scale="0.8 0.8 0.8">' +
-      VISUALS.ar3d(level.ar.visual) +
-      '</a-entity></a-entity>' +
+      anchor('ar-target', 0) +
+      anchor('ar-target-uni', 1) +
       '<a-entity light="type: ambient; intensity: 0.9"></a-entity>' +
       '<a-entity light="type: directional; intensity: 0.55" position="1 2 1"></a-entity>';
 
     host.appendChild(sceneEl);
 
-    /* ── v1.2 事件銜接：entity 與 a-scene 兩層都綁 ──
+    /* ── v1.2 事件銜接：entity 與 a-scene 兩層都綁（v1.3 擴為兩個 entity）──
        A-Frame 的 emit 預設會冒泡，所以 entity 發出的事件也會被 scene 收到；
        用 foundFired 與 e.target 檢查去重，同時涵蓋「事件只發在 scene 上」的版本差異。 */
     const tgt = sceneEl.querySelector('#ar-target');
+    const uni = sceneEl.querySelector('#ar-target-uni');
     targetEl = tgt;
+    uniEl = uni;
 
-    const fireFound = src => {
+    const fireFound = (src, index) => {
       diag.targetFound++;
-      log('targetFound level', level.n, '(via ' + src + ')');
+      log('targetFound level', level.n, '(via ' + src + ', targetIndex ' + index + ')');
       if (foundFired) return;                 // 一次掃描只認第一次
       foundFired = true;
+      diag.foundIndex = index;
       if (!onFoundCb) {
         diag.foundCallback = 'missing';
         log('⚠ targetFound 觸發但沒有 onFound callback');
@@ -435,7 +477,7 @@ window.AR = (function () {
       diag.foundCallback = 'fired';
       /* 注意：這裡「不」清掉 onFoundCb，改由 foundFired 控制次數，
          以免像 v1.1 那樣被生命週期呼叫順序意外抹掉。 */
-      try { onFoundCb(); } catch (e) { log('onFound callback error', e); }
+      try { onFoundCb(index); } catch (e) { log('onFound callback error', e); }
     };
     const fireLost = src => {
       diag.targetLost++;
@@ -444,10 +486,17 @@ window.AR = (function () {
       if (onLostCb) { try { onLostCb(); } catch (e) { log('onLost callback error', e); } }
     };
 
-    tgt.addEventListener('targetFound', () => fireFound('entity'));
+    tgt.addEventListener('targetFound', () => fireFound('entity', 0));
     tgt.addEventListener('targetLost', () => fireLost('entity'));
-    sceneEl.addEventListener('targetFound', e => { if (e.target !== tgt) fireFound('scene'); });
-    sceneEl.addEventListener('targetLost', e => { if (e.target !== tgt) fireLost('scene'); });
+    uni.addEventListener('targetFound', () => fireFound('entity-universal', 1));
+    uni.addEventListener('targetLost', () => fireLost('entity-universal'));
+    // scene 層只處理「事件沒有從 entity 冒泡上來」的版本差異，避免重複計數
+    sceneEl.addEventListener('targetFound', e => {
+      if (e.target !== tgt && e.target !== uni) fireFound('scene', indexOfTargetEl(e.target));
+    });
+    sceneEl.addEventListener('targetLost', e => {
+      if (e.target !== tgt && e.target !== uni) fireLost('scene');
+    });
 
     await new Promise(res => {
       if (sceneEl.hasLoaded) return res();
@@ -527,7 +576,7 @@ window.AR = (function () {
     /* v1.2：keepStream 代表「start() 內部的清場」，此時不可清掉 callback。
        只有真正結束掃描（不保留串流）才把 callback 收回。 */
     if (!keep) { onFoundCb = null; onLostCb = null; foundFired = false; }
-    targetEl = null;
+    targetEl = null; uniEl = null;
     if (mo) { try { mo.disconnect(); } catch (e) {} mo = null; }
     if (sceneEl) {
       const sys = sceneEl.systems && sceneEl.systems['mindar-image-system'];
@@ -592,24 +641,54 @@ window.AR = (function () {
     mindReady: () => !!(mindVideo && mindVideo.isConnected && mindVideo.videoWidth > 0),
     prefetchTarget, targetPath,
     probe, resetProbe, brightnessOf, diagText, diagData,
-    /* ── v1.2 驗證掛鉤 ──
-       simulateFound('entity'|'scene') 直接在對應層派發真的 targetFound
-       CustomEvent，用來在沒有實體卡片的桌機上驗證整條銜接鏈。 */
+    /* ── v1.2／v1.3 驗證掛鉤 ──
+       simulateFound('entity'|'universal'|'scene') 直接在對應層派發真的 targetFound
+       CustomEvent，用來在沒有實體卡片的桌機上驗證整條銜接鏈。
+       'entity' = target 0（本關卡片）、'universal' = target 1（萬用卡）。 */
     simulateFound(where) {
-      const layer = (where === 'scene') ? sceneEl : (targetEl || sceneEl);
+      const layer = (where === 'scene') ? sceneEl
+                  : (where === 'universal') ? (uniEl || targetEl || sceneEl)
+                  : (targetEl || sceneEl);
       if (!layer) return false;
       layer.dispatchEvent(new CustomEvent('targetFound', { bubbles: true }));
       return true;
     },
     simulateLost(where) {
-      const layer = (where === 'scene') ? sceneEl : (targetEl || sceneEl);
+      const layer = (where === 'scene') ? sceneEl
+                  : (where === 'universal') ? (uniEl || targetEl || sceneEl)
+                  : (targetEl || sceneEl);
       if (!layer) return false;
       layer.dispatchEvent(new CustomEvent('targetLost', { bubbles: true }));
       return true;
     },
+    /* v1.3：讀出某一關 .mind 內實際有幾個 target（驗證雙目標編譯成功）。
+       只在驗證與診斷時呼叫，一般遊玩流程不會用到。 */
+    async inspectTarget(level) {
+      const path = targetPath(level);
+      const r = await fetch(path, { cache: 'force-cache' });
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + path);
+      const buf = await r.arrayBuffer();
+      const c = new window.MINDAR.IMAGE.Compiler();
+      const data = c.importData(buf);
+      const count = pts => {
+        let n = 0;
+        (pts || []).forEach(lv => ['maximaPoints', 'minimaPoints', 'points'].forEach(k => {
+          if (lv && Array.isArray(lv[k])) n += lv[k].length;
+        }));
+        return n;
+      };
+      diag.mindTargets = data.length;
+      return {
+        path, bytes: buf.byteLength, targets: data.length,
+        points: data.map(d => count(d.matchingData)),
+        tracking: data.map(d => count(d.trackingData)),
+        dims: data.map(d => d.targetImage.width + '×' + d.targetImage.height)
+      };
+    },
     hasFoundCallback: () => !!onFoundCb,
     get sceneEl() { return sceneEl; },
     get targetEl() { return targetEl; },
+    get universalEl() { return uniEl; },
     get running() { return running; },
     get stream() { return camStream; }
   };

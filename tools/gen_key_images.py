@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 產生 10 張「關卡關鍵圖片」（AR 掃描目標 ＋ 教學插圖）
+＋ 第 0 張「遊戲萬用卡」（v1.3；每一關都可以掃它，一張卡玩到底）
 - 1200x1200 px @ 300 dpi（約 10.2 cm 見方）
 - 高特徵密度：不規則邊框刻度、非重複紋理斑塊、豐富角點
 - 全部自繪，零版權素材
-輸出：assets/targets/levelNN.png（300dpi PNG）
+輸出：assets/targets/levelNN.png、assets/targets/universal.png（300dpi PNG）
 """
 import os, math, random
 from PIL import Image, ImageDraw, ImageFont
@@ -494,6 +495,276 @@ def art10(d, rng):  # 綠色化學 12 原則
     speckle(d, rng, (x0 + 30, y0 + 140, x1 - 30, y1 - 120), 60)
 
 
+# ================================================================ 萬用卡（v1.3）
+# 設計原則：
+#   1. 與十張關卡卡「明顯不同」——邊框改為波浪＋菱格鏈，主色改森綠／典雅金，
+#      版心是三位主角剪影，不是圖表。玩家一眼分得出「這是萬用卡」。
+#   2. 特徵密度更高——蛇紋石層理斜紋、海浪弧線、剪影輪廓、三層 speckle，
+#      角點來源彼此不重複（避免自我相似造成誤配）。
+#   3. 每一關的 .mind 都把它編成 target 1，所以一張卡可以玩完全程。
+
+def uni_frame(d, rng):
+    """萬用卡專屬邊框：外框波浪 ＋ 內框菱格鏈 ＋ 四角六邊形徽記"""
+    m = 24
+    d.rectangle([m, m, S - m, S - m], outline=GREEN, width=10)
+    d.rectangle([m + 20, m + 20, S - m - 20, S - m - 20], outline=GOLD, width=4)
+
+    # 上下：連續波浪（相位不同 → 上下不對稱）
+    for k, (yy, ph, col) in enumerate([(m + 44, 0.0, DEEP), (S - m - 44, 1.7, TEAL)]):
+        pts = []
+        for i in range(0, S - 2 * m - 60, 6):
+            x = m + 30 + i
+            y = yy + math.sin(i * 0.021 + ph) * 13 + math.sin(i * 0.061 + ph * 2) * 5
+            pts.append((x, y))
+        d.line(pts, fill=col, width=6)
+        for i in range(0, len(pts), 11):
+            px, py = pts[i]
+            d.ellipse([px - 6, py - 6, px + 6, py + 6], fill=MOSS, outline=NAVY, width=2)
+
+    # 左右：蛇紋菱格鏈（每格大小依序變化 → 非重複）
+    for side, xx in enumerate([m + 44, S - m - 44]):
+        for i in range(26):
+            cy = m + 60 + i * ((S - 2 * m - 120) / 25.0)
+            r = 13 + ((i * (3 + side)) % 4) * 5
+            c = [GREEN, GOLD, TEAL, MOSS][(i + side * 2) % 4]
+            d.polygon([(xx, cy - r), (xx + r, cy), (xx, cy + r), (xx - r, cy)],
+                      fill=WHITE, outline=c)
+            d.line([(xx, cy - r), (xx + r, cy), (xx, cy + r), (xx - r, cy), (xx, cy - r)],
+                   fill=c, width=4)
+            if i % 3 == 0:
+                d.ellipse([xx - 5, cy - 5, xx + 5, cy + 5], fill=NAVY)
+
+    # 四角六邊形徽記（與關卡卡的方形二進位碼截然不同）
+    for ci, (cx, cy) in enumerate([(m + 52, m + 52), (S - m - 52, m + 52),
+                                   (m + 52, S - m - 52), (S - m - 52, S - m - 52)]):
+        d.regular_polygon((cx, cy, 40), 6, rotation=ci * 15, fill=WHITE, outline=GREEN)
+        d.regular_polygon((cx, cy, 40), 6, rotation=ci * 15, outline=GREEN)
+        d.regular_polygon((cx, cy, 26), 6, rotation=ci * 15 + 30, fill=GOLD, outline=NAVY)
+        for k in range(6):
+            a = math.radians(ci * 15 + k * 60)
+            d.line([cx + 28 * math.cos(a), cy + 28 * math.sin(a),
+                    cx + 40 * math.cos(a), cy + 40 * math.sin(a)], fill=NAVY, width=4)
+        ctext(d, (cx, cy), "OH", F(18), NAVY)
+
+
+def uni_logo(d, cx, cy, r):
+    """遊戲標誌：六邊形盾牌內含「山＋海＋–OH 核心」"""
+    d.regular_polygon((cx, cy, r), 6, rotation=0, fill=NAVY)
+    d.regular_polygon((cx, cy, r - 7), 6, rotation=0, outline=GOLD)
+    for k in range(6):
+        a = math.radians(k * 60)
+        d.line([cx + (r - 7) * math.cos(a), cy + (r - 7) * math.sin(a),
+                cx + (r - 7) * math.cos(a + 1.047), cy + (r - 7) * math.sin(a + 1.047)],
+               fill=GOLD, width=4)
+    # 山（森綠）
+    d.polygon([(cx - r * 0.62, cy + r * 0.12), (cx - r * 0.22, cy - r * 0.48),
+               (cx + r * 0.06, cy - r * 0.10), (cx + r * 0.34, cy - r * 0.55),
+               (cx + r * 0.66, cy + r * 0.12)], fill=MOSS)
+    # 海（三道弧）
+    for k in range(3):
+        yy = cy + r * (0.24 + k * 0.19)
+        d.arc([cx - r * 0.66, yy - r * 0.13, cx + r * 0.66, yy + r * 0.13],
+              200, 340, fill=(150, 205, 226), width=5)
+    # –OH 核心
+    d.ellipse([cx - r * 0.23, cy - r * 0.20, cx + r * 0.23, cy + r * 0.26], fill=GOLD, outline=WHITE, width=3)
+    ctext(d, (cx, cy + r * 0.03), "OH", F(int(r * 0.30)), NAVY)
+
+
+def sil_ahai(d, cx, base, h, col, rim):
+    """阿海剪影：短刺髮少年，手拿量筒"""
+    hw = h * 0.30
+    # 腿
+    d.polygon([(cx - hw * 0.42, base), (cx - hw * 0.10, base),
+               (cx - hw * 0.06, base - h * 0.34), (cx - hw * 0.40, base - h * 0.34)], fill=col)
+    d.polygon([(cx + hw * 0.10, base), (cx + hw * 0.42, base),
+               (cx + hw * 0.40, base - h * 0.34), (cx + hw * 0.06, base - h * 0.34)], fill=col)
+    # 身體
+    d.polygon([(cx - hw * 0.62, base - h * 0.32), (cx + hw * 0.62, base - h * 0.32),
+               (cx + hw * 0.52, base - h * 0.66), (cx - hw * 0.52, base - h * 0.66)], fill=col)
+    # 手臂（右手舉量筒）
+    d.line([cx - hw * 0.56, base - h * 0.62, cx - hw * 0.92, base - h * 0.38], fill=col, width=int(h * 0.055))
+    d.line([cx + hw * 0.56, base - h * 0.62, cx + hw * 0.96, base - h * 0.70], fill=col, width=int(h * 0.055))
+    d.rectangle([cx + hw * 0.84, base - h * 0.86, cx + hw * 1.12, base - h * 0.68], fill=rim, outline=NAVY, width=3)
+    # 頭
+    hy = base - h * 0.78
+    d.ellipse([cx - h * 0.115, hy - h * 0.115, cx + h * 0.115, hy + h * 0.115], fill=col)
+    # 刺髮（不規則，角點多）
+    for k in range(9):
+        a = math.radians(196 + k * 18)
+        r1 = h * 0.113
+        r2 = h * (0.150 + (k % 3) * 0.018)
+        d.line([cx + r1 * math.cos(a), hy + r1 * math.sin(a),
+                cx + r2 * math.cos(a - 0.10), hy + r2 * math.sin(a - 0.10)], fill=col, width=int(h * 0.030))
+    d.arc([cx - h * 0.115, hy - h * 0.115, cx + h * 0.115, hy + h * 0.115], 0, 360, fill=rim, width=4)
+
+
+def sil_xiaoyu(d, cx, base, h, col, rim):
+    """小玉剪影：馬尾女孩，手拿葉片採樣袋"""
+    hw = h * 0.30
+    d.polygon([(cx - hw * 0.40, base), (cx - hw * 0.08, base),
+               (cx - hw * 0.06, base - h * 0.30), (cx - hw * 0.36, base - h * 0.30)], fill=col)
+    d.polygon([(cx + hw * 0.08, base), (cx + hw * 0.40, base),
+               (cx + hw * 0.36, base - h * 0.30), (cx + hw * 0.06, base - h * 0.30)], fill=col)
+    # 裙擺（梯形，下寬）
+    d.polygon([(cx - hw * 0.80, base - h * 0.28), (cx + hw * 0.80, base - h * 0.28),
+               (cx + hw * 0.50, base - h * 0.64), (cx - hw * 0.50, base - h * 0.64)], fill=col)
+    d.line([cx - hw * 0.54, base - h * 0.60, cx - hw * 0.98, base - h * 0.44], fill=col, width=int(h * 0.052))
+    d.line([cx + hw * 0.54, base - h * 0.60, cx + hw * 0.92, base - h * 0.34], fill=col, width=int(h * 0.052))
+    # 採樣袋
+    d.polygon([(cx + hw * 0.78, base - h * 0.34), (cx + hw * 1.14, base - h * 0.34),
+               (cx + hw * 1.06, base - h * 0.10), (cx + hw * 0.86, base - h * 0.10)], fill=rim, outline=NAVY)
+    hy = base - h * 0.76
+    d.ellipse([cx - h * 0.112, hy - h * 0.112, cx + h * 0.112, hy + h * 0.112], fill=col)
+    # 馬尾
+    d.polygon([(cx + h * 0.09, hy - h * 0.06), (cx + h * 0.23, hy + h * 0.02),
+               (cx + h * 0.20, hy + h * 0.20), (cx + h * 0.10, hy + h * 0.10)], fill=col)
+    d.arc([cx - h * 0.112, hy - h * 0.112, cx + h * 0.112, hy + h * 0.112], 0, 360, fill=rim, width=4)
+    # 髮箍
+    d.arc([cx - h * 0.118, hy - h * 0.126, cx + h * 0.118, hy + h * 0.070], 195, 345, fill=rim, width=7)
+
+
+def sil_shewen(d, cx, base, h, col, rim):
+    """蛇紋獸剪影：仿生穿山甲（四足側身、尾在左、頭在右），鱗片＋胸口 –OH 核心"""
+    # 尾（粗根細尖，帶節）
+    tail = [(cx - h * 0.24, base - h * 0.36), (cx - h * 0.46, base - h * 0.30),
+            (cx - h * 0.62, base - h * 0.12), (cx - h * 0.58, base - h * 0.04),
+            (cx - h * 0.46, base - h * 0.16), (cx - h * 0.28, base - h * 0.18)]
+    d.polygon(tail, fill=col)
+    for k in range(4):
+        t = 0.18 + k * 0.20
+        px = cx - h * (0.28 + t * 0.30)
+        py = base - h * (0.30 - t * 0.14)
+        d.polygon([(px - h * 0.030, py + h * 0.024), (px, py - h * 0.026),
+                   (px + h * 0.030, py + h * 0.024)], fill=rim, outline=NAVY)
+    # 四足
+    for sx, hgt in ((-0.20, 0.22), (-0.08, 0.20), (0.10, 0.20), (0.22, 0.22)):
+        d.rounded_rectangle([cx + h * sx - h * 0.040, base - h * hgt,
+                             cx + h * sx + h * 0.040, base], int(h * 0.03), fill=col)
+    # 軀幹（拱背，橫長）
+    d.ellipse([cx - h * 0.30, base - h * 0.60, cx + h * 0.30, base - h * 0.16], fill=col)
+    d.polygon([(cx - h * 0.26, base - h * 0.20), (cx + h * 0.30, base - h * 0.20),
+               (cx + h * 0.30, base - h * 0.42), (cx - h * 0.26, base - h * 0.42)], fill=col)
+    # 背甲鱗片（沿拱背排列，每列數量與大小不同 → 非重複紋理）
+    for k in range(4):
+        rr = h * (0.20 + k * 0.052)
+        n = 4 + k * 2
+        for i in range(n):
+            a = math.radians(188 + i * (152.0 / max(n - 1, 1)))
+            px = cx + rr * math.cos(a) * 1.02
+            py = base - h * 0.40 + rr * math.sin(a) * 0.86
+            if py > base - h * 0.36:
+                continue
+            s = h * (0.026 + (i % 3) * 0.006)
+            d.polygon([(px - s, py + s * 0.7), (px, py - s), (px + s, py + s * 0.7)],
+                      fill=rim, outline=NAVY)
+    # 頸與頭（頭略低於背，吻部短而尖）
+    hy = base - h * 0.50
+    d.polygon([(cx + h * 0.14, base - h * 0.56), (cx + h * 0.32, hy - h * 0.10),
+               (cx + h * 0.32, hy + h * 0.06), (cx + h * 0.14, base - h * 0.30)], fill=col)
+    d.ellipse([cx + h * 0.26, hy - h * 0.10, cx + h * 0.44, hy + h * 0.07], fill=col)
+    d.polygon([(cx + h * 0.42, hy - h * 0.045), (cx + h * 0.53, hy + h * 0.005),
+               (cx + h * 0.42, hy + h * 0.055)], fill=col)          # 吻
+    d.polygon([(cx + h * 0.29, hy - h * 0.09), (cx + h * 0.34, hy - h * 0.17),
+               (cx + h * 0.36, hy - h * 0.07)], fill=col)           # 耳
+    d.ellipse([cx + h * 0.355, hy - h * 0.040, cx + h * 0.390, hy - h * 0.005],
+              fill=GOLD, outline=NAVY, width=2)                     # 眼
+    # 胸口 –OH 核心
+    d.ellipse([cx - h * 0.02, base - h * 0.42, cx + h * 0.13, base - h * 0.27],
+              fill=GOLD, outline=WHITE, width=3)
+    ctext(d, (cx + h * 0.055, base - h * 0.345), "OH", F(int(h * 0.058)), NAVY)
+
+
+def art_universal(d, rng):
+    """萬用卡版心：蛇紋石層理 × 海浪 × 三位主角剪影"""
+    x0, y0, x1, y1 = 96, 244, S - 96, 902
+    d.rounded_rectangle([x0, y0, x1, y1], 22, fill=WHITE, outline=GREEN, width=5)
+
+    # 上半：蛇紋石斜層理（傾斜條帶，寬度不等 → 特徵不重複）
+    rng2 = random.Random(7001)
+    band = y0 + 4
+    tones = [(214, 232, 222), (188, 216, 200), (232, 240, 232), (170, 202, 184), (204, 224, 212)]
+    i = 0
+    while band < y0 + 330:
+        hgt = rng2.uniform(22, 46)
+        pts = [(x0 + 4, band), (x1 - 4, band - 26), (x1 - 4, band - 26 + hgt), (x0 + 4, band + hgt)]
+        d.polygon(pts, fill=tones[i % 5])
+        d.line([(x0 + 4, band), (x1 - 4, band - 26)], fill=(120, 158, 136), width=3)
+        # 層間 –OH 門把：只放在部分層、間距不等（避免形成規則點陣造成自我相似）
+        if i % 3 == 1:
+            step = 208 + (i % 5) * 46
+            px = x0 + 70 + (i * 53) % 150
+            while px < x1 - 50:
+                py = band + hgt * 0.62 - (px - x0) * 26.0 / (x1 - x0)
+                d.line([px, py, px, py - 15], fill=GOLD, width=5)
+                d.ellipse([px - 10, py - 33, px + 10, py - 13], fill=GOLD, outline=NAVY, width=3)
+                px += step
+        band += hgt
+        i += 1
+
+    # 下半：海浪（振幅／相位逐列不同）
+    d.rectangle([x0 + 4, y0 + 330, x1 - 4, y1 - 4], fill=(42, 122, 158))
+    for r in range(9):
+        yy = y0 + 348 + r * 36
+        amp = 8 + (r % 4) * 4
+        pts = []
+        for k in range(0, x1 - x0 - 8, 8):
+            pts.append((x0 + 4 + k, yy + math.sin(k * 0.017 + r * 0.9) * amp))
+        d.line(pts, fill=(150 + (r % 3) * 22, 208, 230), width=4)
+        for k in range(2 + r % 3, len(pts), 9):
+            px, py = pts[k]
+            d.ellipse([px - 5, py - 5, px + 5, py + 5], fill=WHITE, outline=DEEP, width=2)
+
+    # 分隔：金色斷層線
+    d.line([x0 + 4, y0 + 330, x1 - 4, y0 + 330], fill=GOLD, width=7)
+
+    # 紋理斑塊（先鋪底，之後剪影蓋在上面 → 主角輪廓乾淨、對比明確）
+    speckle(d, rng, (x0 + 14, y0 + 14, x1 - 14, y0 + 320), 90)
+    speckle(d, rng, (x0 + 14, y0 + 340, x1 - 14, y1 - 130), 70)
+
+    # 三位主角剪影（跨層理與海浪，輪廓角點豐富）
+    base = y1 - 118
+    hh = 330
+    sil_ahai(d, x0 + 200, base, hh, NAVY, (150, 205, 226))
+    sil_xiaoyu(d, (x0 + x1) / 2, base, hh, (24, 76, 56), MOSS)
+    sil_shewen(d, x1 - 226, base, hh, (46, 64, 58), MOSS)
+
+    # 名牌
+    for cx, nm, c in [(x0 + 200, "阿海", DEEP), ((x0 + x1) / 2, "小玉", GREEN), (x1 - 226, "蛇紋獸", GOLD)]:
+        d.rounded_rectangle([cx - 92, y1 - 106, cx + 92, y1 - 34], 16, fill=WHITE, outline=c, width=5)
+        ctext(d, (cx, y1 - 70), nm, F(36), c)
+
+
+def build_universal():
+    """第 0 張：遊戲萬用卡 assets/targets/universal.png"""
+    img = Image.new("RGB", (S, S), (247, 251, 248))
+    d = ImageDraw.Draw(img)
+    rng = random.Random(70000)
+    uni_frame(d, rng)
+
+    # 標頭（森綠底，與關卡卡的 navy 標頭不同）
+    d.rounded_rectangle([76, 84, S - 76, 226], 22, fill=GREEN)
+    uni_logo(d, 152, 155, 56)
+    ctext(d, (230, 126), "UNIVERSAL CARD · SCAN ME ANYTIME", F(24, False), (214, 238, 226), "lm")
+    ctext(d, (230, 180), "遊戲萬用卡", F(48), WHITE, "lm")
+    d.rounded_rectangle([S - 320, 116, S - 100, 196], 18, fill=GOLD)
+    ctext(d, (S - 210, 142), "一張卡", F(28), NAVY)
+    ctext(d, (S - 210, 176), "玩全程", F(28), NAVY)
+
+    art_universal(d, rng)
+
+    # 頁尾說明
+    d.rounded_rectangle([76, 924, S - 76, S - 84], 20, fill=NAVY)
+    ctext(d, (110, 962), "掃描說明", F(24), MOSS, "lm")
+    ctext(d, (110, 1010), "任何一關按「開始掃描」，都可以掃這一張卡。", F(28), WHITE, "lm")
+    ctext(d, (110, 1058), "不必每一關換一張圖，一張卡就能從第 1 關玩到第 10 關。", F(24, False), (198, 220, 232), "lm")
+    ctext(d, (S - 110, 1010), "L00", F(52), GOLD, "rm")
+
+    p = os.path.join(OUT, "universal.png")
+    img.save(p, dpi=(DPI, DPI))
+    print("saved", p)
+    return p
+
+
 LEVELS = [
     (1, "花蓮的山與海", "LOCAL RESOURCES", art01, "掃描這張圖，盤點花蓮的在地資源"),
     (2, "石材廠的邊角料", "STONE WASTE", art02, "掃描這張圖，看見廢石粉的現況"),
@@ -509,6 +780,7 @@ LEVELS = [
 
 
 def build():
+    build_universal()
     for n, title, en, fn, note in LEVELS:
         img = Image.new("RGB", (S, S), BG)
         d = ImageDraw.Draw(img)

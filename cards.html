@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="description" content="花蓮綠色化學闖關 — 關卡卡片輪播（第二台裝置顯示用）">
+<title>卡片輪播 — 花蓮綠色化學闖關</title>
+<style>
+  /* 這一頁刻意用純白高亮底色：第二台裝置拿來「當卡片」給第一台掃，
+     背景越白、對比越高，辨識越穩定。整頁不做任何深色主題切換。 */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#fff;color:#1E293B;
+    font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+    display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior:none;
+  }
+  header{
+    flex:0 0 auto;text-align:center;padding:10px 8px 6px;
+    border-bottom:3px solid #1C7293;background:#fff;
+  }
+  #ttl{font-size:clamp(20px,5.4vw,34px);font-weight:800;color:#0B1F3A;line-height:1.25}
+  #sub{font-size:clamp(13px,3.2vw,17px);color:#64748B;margin-top:3px}
+  #sub b{color:#1C7293}
+
+  main{
+    flex:1 1 auto;position:relative;display:flex;align-items:center;justify-content:center;
+    min-height:0;background:#fff;
+  }
+  /* 點左半／右半螢幕切換：兩塊透明感應區壓在圖片上方，但在箭頭之下 */
+  .half{position:absolute;top:0;bottom:0;width:34%;z-index:2;background:transparent;
+        border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .half.l{left:0}.half.r{right:0}
+  #img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+       display:block;image-rendering:auto;background:#fff}
+
+  .nav{
+    position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+    width:72px;height:72px;min-width:64px;min-height:64px;border-radius:50%;
+    border:3px solid #0B1F3A;background:rgba(255,255,255,.92);color:#0B1F3A;
+    font-size:34px;line-height:1;font-weight:900;cursor:pointer;
+    box-shadow:0 4px 14px rgba(11,31,58,.22);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .nav:active{background:#0B1F3A;color:#fff}
+  .nav[disabled]{opacity:.22;cursor:default}
+  #prev{left:10px}#next{right:10px}
+
+  footer{
+    flex:0 0 auto;padding:8px 12px 12px;text-align:center;
+    border-top:2px solid #E2E8F0;background:#fff;
+  }
+  #dots{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+  .dot{width:26px;height:26px;border-radius:8px;border:2px solid #94A3B8;background:#fff;
+       color:#475569;font-size:12px;font-weight:700;cursor:pointer;padding:0;line-height:1}
+  .dot.on{background:#1C7293;border-color:#0B1F3A;color:#fff}
+  .dot.uni{border-color:#C99A3E;color:#8A6A25}
+  .dot.uni.on{background:#C99A3E;border-color:#0B1F3A;color:#0B1F3A}
+  .tip{font-size:clamp(12px,3vw,15px);color:#64748B;line-height:1.5}
+  .tip a{color:#1C7293;font-weight:700}
+  @media (max-width:420px){ .nav{width:64px;height:64px;font-size:30px} }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="ttl">關卡卡片</div>
+  <div id="sub"></div>
+</header>
+
+<main>
+  <button class="half l" id="halfL" aria-label="上一張"></button>
+  <button class="half r" id="halfR" aria-label="下一張"></button>
+  <img id="img" alt="關卡卡片">
+  <button class="nav" id="prev" aria-label="上一張">◀</button>
+  <button class="nav" id="next" aria-label="下一張">▶</button>
+</main>
+
+<footer>
+  <div id="dots"></div>
+  <p class="tip">
+    用 <b>←</b> <b>→</b> 或左右箭頭切換，也可以直接點螢幕左半／右半。
+    ・把這一頁開在<b>第二台裝置</b>（另一支手機、平板或筆電），就能拿它當卡片給遊戲掃。
+    ・<a href="index.html">回到遊戲</a>
+  </p>
+</footer>
+
+<script>
+(function(){
+  /* 卡片清單：第 0 張是萬用卡（一張卡玩到底），其後是十張關卡卡。 */
+  var TITLES = [
+    '花蓮的山與海','石材廠的邊角料','墨玉的秘密','深層海水的礦物','水是最好的溶劑',
+    '微胞奈米反應艙','常溫改質不燒窯','遠紅外線杯墊誕生','災害土砂的第二種命運','綠色化學大考驗'
+  ];
+  var CARDS = [{
+    src:'assets/targets/universal.png', uni:true,
+    title:'遊戲萬用卡', sub:'一張卡玩到底 — 任何一關都能掃這張'
+  }];
+  for (var i=0;i<10;i++){
+    CARDS.push({
+      src:'assets/targets/level'+String(i+1).padStart(2,'0')+'.png', uni:false,
+      title:TITLES[i], sub:'關卡 '+(i+1)+' ／ 10'
+    });
+  }
+
+  var idx = 0;
+  var img=document.getElementById('img'), ttl=document.getElementById('ttl'),
+      sub=document.getElementById('sub'), prev=document.getElementById('prev'),
+      next=document.getElementById('next'), dots=document.getElementById('dots');
+
+  /* 圓點索引列：0 = 萬用卡（金色），1–10 = 關卡 */
+  CARDS.forEach(function(c,i){
+    var b=document.createElement('button');
+    b.className='dot'+(c.uni?' uni':'');
+    b.textContent = c.uni ? '★' : String(i);
+    b.title = c.uni ? '萬用卡' : ('關卡 '+i);
+    b.addEventListener('click', function(){ go(i); });
+    dots.appendChild(b);
+  });
+
+  function preload(i){
+    if (i<0 || i>=CARDS.length) return;
+    var p=new Image(); p.src=CARDS[i].src;
+  }
+
+  function go(i){
+    if (i<0) i=0;
+    if (i>CARDS.length-1) i=CARDS.length-1;
+    idx=i;
+    var c=CARDS[i];
+    img.src=c.src;
+    img.alt=c.title;
+    ttl.textContent = c.uni ? ('★ '+c.title) : ('關卡 '+i+'　'+c.title);
+    sub.innerHTML = c.uni ? c.sub : ('<b>'+c.sub+'</b>　把整張圖填滿掃描框');
+    prev.disabled = (i===0);
+    next.disabled = (i===CARDS.length-1);
+    Array.prototype.forEach.call(dots.children,function(d,k){ d.classList.toggle('on',k===i); });
+    document.title = (c.uni?'萬用卡':('關卡 '+i+' '+c.title))+' — 卡片輪播';
+    preload(i+1); preload(i-1);
+    // 記住看到哪一張，換頁回來還在同一張（隱私模式會丟出例外，忽略即可）
+    try { localStorage.setItem('hgcq.cards.idx', String(i)); } catch(e){}
+  }
+
+  prev.addEventListener('click', function(e){ e.stopPropagation(); go(idx-1); });
+  next.addEventListener('click', function(e){ e.stopPropagation(); go(idx+1); });
+  document.getElementById('halfL').addEventListener('click', function(){ go(idx-1); });
+  document.getElementById('halfR').addEventListener('click', function(){ go(idx+1); });
+
+  addEventListener('keydown', function(e){
+    if (e.key==='ArrowLeft'){ go(idx-1); e.preventDefault(); }
+    else if (e.key==='ArrowRight'){ go(idx+1); e.preventDefault(); }
+    else if (e.key==='Home'){ go(0); e.preventDefault(); }
+    else if (e.key==='End'){ go(CARDS.length-1); e.preventDefault(); }
+  });
+
+  /* 觸控滑動切換（水平位移大於垂直才算） */
+  var sx=0, sy=0, tracking=false;
+  addEventListener('touchstart', function(e){
+    if (e.touches.length!==1) return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY; tracking=true;
+  }, {passive:true});
+  addEventListener('touchend', function(e){
+    if (!tracking) return; tracking=false;
+    var t=e.changedTouches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+    if (Math.abs(dx)>52 && Math.abs(dx)>Math.abs(dy)*1.4) go(idx + (dx<0?1:-1));
+  }, {passive:true});
+
+  var start=0;
+  try { var v=parseInt(localStorage.getItem('hgcq.cards.idx'),10); if(!isNaN(v)) start=v; } catch(e){}
+  // 網址可指定：cards.html?n=3（0 代表萬用卡）
+  var m=/[?&]n=(\d+)/.exec(location.search);
+  if (m) start=parseInt(m[1],10);
+  go(start);
+
+  // 對外掛鉤，供自動化驗證
+  window.__cards = { go:go, cards:CARDS, index:function(){ return idx; } };
+})();
+</script>
+</body>
+</html>

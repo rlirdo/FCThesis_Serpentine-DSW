@@ -1,4 +1,9 @@
-/* 花蓮綠色化學闖關 — 主流程 v1.2 */
+/* 花蓮綠色化學闖關 — 主流程 v1.3
+   v1.3 解決「每過一關就要回筆電換一張圖才能掃」的連續性斷點，三條並行的路：
+   ① 萬用卡：每關的 .mind 都含兩個 target（本關卡片 ＋ 萬用卡），掃哪一張都算過關。
+   ② 卡片輪播頁 cards.html：第二台裝置當卡片用。
+   ③ 免卡體驗：開後鏡頭把教學內容疊在實景上，完全不需要卡片，還能拍照留念。
+   另外用 localStorage 記住上次選的模式，下一關預設高亮同一個，少按一次。 */
 (function () {
   const D = window.GAME_DATA;
   const $ = s => document.querySelector(s);
@@ -241,13 +246,41 @@
     addEventListener('keyup',   e => { const k = KEY[e.key]; if (k) { P.dir[k] = false; e.preventDefault(); } });
   }
 
+  /* ═══════════ v1.3 掃描模式記憶 ═══════════
+     localStorage 在 Safari 無痕模式會直接丟例外（QuotaExceededError），
+     所以讀寫一律包 try/catch；失敗就當作「沒有上次紀錄」，功能照常。 */
+  const MODE_KEY = 'hgcq.scanMode';
+  const MODES = ['scan', 'nocard', 'skip'];
+  function loadMode() {
+    try {
+      const v = localStorage.getItem(MODE_KEY);
+      return MODES.indexOf(v) >= 0 ? v : null;
+    } catch (e) { return null; }
+  }
+  function saveMode(m) {
+    if (MODES.indexOf(m) < 0) return false;
+    try { localStorage.setItem(MODE_KEY, m); return true; }
+    catch (e) { console.warn('[mode] localStorage 不可用，這次不記憶', e); return false; }
+  }
+  /* 把上次用過的模式高亮起來並顯示「上次用這個」；沒有紀錄就三個都平等。 */
+  function markLastMode() {
+    const last = loadMode();
+    $$('.mode-btn').forEach(b => b.classList.toggle('last', b.dataset.mode === last));
+    return last;
+  }
+
   /* ───────── AR 模式 ───────── */
   function enterAR() {
     const L = cur();
     stopLoop();
     clearSuccess();
+    hideNoCard();
     $('#ar-intro-title').textContent = '關卡 ' + L.n + '：' + L.title;
+    /* 情境引導：先告訴玩家「萬用卡可以一張玩到底」，再說十張卡片組要掃第幾號。 */
+    $('#ar-lead').innerHTML =
+      '用<b>「萬用卡」</b>可以一張玩到底；有十張卡片組的話，本關請掃<b>第 ' + L.n + ' 號卡</b>。';
     $('#fb-img').src = 'assets/targets/level' + String(L.n).padStart(2, '0') + '.png';
+    markLastMode();
     $('#ar-intro').classList.remove('hidden');
     $('#ar-fallback').classList.add('hidden');
     $('#ar-teach').classList.add('hidden');
@@ -263,23 +296,29 @@
        ・隨時可按底部大按鈕「進入教學 ▶」立刻進入
      targetLost 一律不重置倒數、不收回按鈕 —— 掃到就算數。 */
   const AUTO_SEC = 4;
-  const SUC = { timer: 0, left: 0, level: null, entering: false, foundAt: 0 };
+  const SUC = { timer: 0, left: 0, level: null, entering: false, foundAt: 0, index: null };
 
   function clearSuccess() {
     if (SUC.timer) { clearInterval(SUC.timer); SUC.timer = 0; }
-    SUC.left = 0; SUC.level = null; SUC.entering = false; SUC.foundAt = 0;
+    SUC.left = 0; SUC.level = null; SUC.entering = false; SUC.foundAt = 0; SUC.index = null;
     $('#ar-success').classList.add('hidden');
     $('#ar-success-count').textContent = '';
+    $('#ar-success-mark').textContent = '✓ 掃描成功！';
   }
 
   /* targetFound 的唯一入口。注意：這裡刻意「不」呼叫 AR.stop()，
-     讓 3D 疊加內容在倒數的 4 秒內繼續顯示給玩家看。 */
-  function scanSuccess(L) {
+     讓 3D 疊加內容在倒數的 4 秒內繼續顯示給玩家看。
+     v1.3：index 指出掃到的是哪一張（0 = 本關卡片、1 = 萬用卡），
+     兩者都直接算過關，浮現與進入的都是「本關」的教學內容。 */
+  function scanSuccess(L, index) {
     if (SUC.level || SUC.entering) return;      // 只認第一次
     SUC.level = L || cur();
     SUC.foundAt = Date.now();
+    SUC.index = (index === undefined) ? null : index;
     stopHealthCheck();
     $('#ar-scanning').classList.add('hidden');  // 收起準心，露出 AR 疊加畫面
+    $('#ar-success-mark').textContent =
+      index === 1 ? '✓ 掃到萬用卡！' : index === 0 ? '✓ 掃到第 ' + SUC.level.n + ' 號卡！' : '✓ 掃描成功！';
     $('#ar-success').classList.remove('hidden');
     try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) { /* 不支援就略過 */ }
     SUC.left = AUTO_SEC;
@@ -382,10 +421,13 @@
   /* ── A. 相機預檢：按鈕手勢內立刻 getUserMedia，再背景載 .mind ── */
   async function startCamera() {
     const L = cur();
+    saveMode('scan');
     clearSuccess();
+    hideNoCard();
     $('#ar-intro').classList.add('hidden');
     $('#ar-fallback').classList.add('hidden');
     $('#ar-scanning').classList.remove('hidden');
+    $('#ar-scanning').classList.remove('plain');
     scanHint(''); scanWait(false);
     scanStatus('正在開啟相機…');
 
@@ -426,7 +468,8 @@
     try {
       await AR.start(L, {
         host: $('#ar-host'), stream: stream, mindSrc: mindSrc,
-        onFound: () => scanSuccess(L),
+        // v1.3：target 0（本關卡片）與 target 1（萬用卡）都接到這裡
+        onFound: index => scanSuccess(L, index),
         // v1.2：追蹤中斷刻意不做任何事 —— 已經掃到就算數，手持晃動不懲罰玩家
         onLost: () => { /* no-op by design */ }
       });
@@ -452,13 +495,260 @@
       if (AR.mindReady()) { clearInterval(swap); AR.hidePreview(); }
       else if (++n > 20) clearInterval(swap);
     }, 250);
-    toast('相機已啟動，請對準關鍵圖片');
+    toast('相機已啟動：本關卡片或萬用卡，掃到哪一張都算過關');
+  }
+
+  /* ═══════════ v1.3 免卡體驗模式 ═══════════
+     不需要 MindAR、不需要卡片、不需要任何錨定：
+       後鏡頭實景全螢幕（沿用 v1.1 的預檢管線）
+       → 本關教學內容以半透明底板疊在畫面中央（輕微上下浮動）
+       → 「📸 拍下學習瞬間」把「實景 ＋ 疊加內容」合成成一張 PNG
+       → 「繼續 ▶」關掉相機、進入教學。
+     iOS 的陀螺儀需要 DeviceOrientationEvent.requestPermission 這個「權限視窗」，
+     為了不在教學現場多跳一個嚇人的對話框，這裡只在「沒有 requestPermission」
+     （＝Android）時才啟用輕微視差，iOS 一律不啟用、也不彈窗。 */
+  const NOCARD = { on: false, tiltBound: null, photoUrl: null };
+
+  function hideNoCard() {
+    NOCARD.on = false;
+    $('#ar-nocard').classList.add('hidden');
+    $('#nocard-photo').classList.add('hidden');
+    if (NOCARD.tiltBound) { removeEventListener('deviceorientation', NOCARD.tiltBound); NOCARD.tiltBound = null; }
+    const t = $('#nocard-tilt');
+    if (t) t.style.transform = '';
+    if (NOCARD.photoUrl) { try { URL.revokeObjectURL(NOCARD.photoUrl); } catch (e) {} NOCARD.photoUrl = null; }
+  }
+
+  function buildNoCard(L) {
+    $('#nocard-kicker').textContent = '免卡體驗 · 關卡 ' + L.n + ' · ' + L.en;
+    $('#nocard-title').textContent = L.ar.title;
+    $('#nocard-visual').innerHTML = VISUALS.svg(L.ar.visual);
+    $('#nocard-points').innerHTML = L.ar.points.map(p => '<li>' + p + '</li>').join('');
+  }
+
+  /* Android 才啟用的輕微視差。iOS 上 DeviceOrientationEvent.requestPermission
+     是一個函式（需要使用者手勢＋權限視窗），偵測到就直接不啟用。 */
+  function bindTilt() {
+    if (NOCARD.tiltBound) return false;
+    if (typeof DeviceOrientationEvent === 'undefined') return false;
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') return false;  // iOS：不啟用、不彈窗
+    const el = $('#nocard-tilt');
+    NOCARD.tiltBound = e => {
+      if (!NOCARD.on) return;
+      const g = Math.max(-24, Math.min(24, e.gamma || 0));   // 左右傾斜
+      const b = Math.max(-24, Math.min(24, (e.beta || 0) - 45));
+      el.style.transform = 'translate3d(' + (g * 0.5).toFixed(1) + 'px,' + (b * 0.35).toFixed(1) + 'px,0)';
+    };
+    addEventListener('deviceorientation', NOCARD.tiltBound, true);
+    return true;
+  }
+
+  async function startNoCard() {
+    const L = cur();
+    saveMode('nocard');
+    clearSuccess();
+    hideNoCard();
+    $('#ar-intro').classList.add('hidden');
+    $('#ar-fallback').classList.add('hidden');
+    $('#ar-scanning').classList.remove('hidden');
+    $('#ar-scanning').classList.add('plain');    // 免卡模式不需要掃描準心
+    scanHint(''); scanWait(false);
+    scanStatus('正在開啟相機…');
+
+    const pf = AR.preflight();
+    if (!pf.ok) { AR.queryPermission(); return failCamera(pf); }
+
+    let stream;
+    try {
+      stream = await AR.acquireCamera();          // 手勢內立刻取得，維持 iOS 手勢鏈
+    } catch (e) {
+      await AR.queryPermission();
+      return failCamera(AR.explain(e));
+    }
+    try { await AR.attachPreview($('#cam-preview'), stream); } catch (e) { console.warn(e); }
+    AR.queryPermission();
+    scanStatus('相機已開啟');
+
+    const hc = await healthCheck();               // 沿用 v1.1 的黑畫面／無畫面判定
+    if (!hc.ok) return failCamera(hc);
+
+    $('#ar-scanning').classList.add('hidden');
+    $('#ar-scanning').classList.remove('plain');
+    buildNoCard(L);
+    NOCARD.on = true;
+    $('#ar-nocard').classList.remove('hidden');
+    bindTilt();
+    toast('這是免卡體驗：教學內容直接疊在你眼前的實景上');
+  }
+
+  /* ── 合成照片：實景 ＋ 疊加內容 ──
+     DOM 沒辦法直接畫進 canvas，所以教學圖是把 VISUALS 的 SVG 字串轉成
+     data: URL 再 drawImage（data: URL 不會污染 canvas，toBlob 才拿得到內容）。
+     文字則直接用 canvas fillText 重畫一次。 */
+  function svgToImage(kind) {
+    let s = VISUALS.svg(kind);
+    if (!s) return Promise.resolve(null);
+    const m = /viewBox="0 0 (\d+) (\d+)"/.exec(s);
+    const w = m ? +m[1] : 340, h = m ? +m[2] : 190;
+    /* SVG 當成圖片載入時走的是 XML 解析器，重複的 xmlns 屬性會直接判定文件格式錯誤
+       （畫面上什麼都不會出現，也不會丟例外）。VISUALS 產出的字串本來就帶 xmlns，
+       所以這裡只補 width/height，缺 xmlns 時才補上。 */
+    const ns = /xmlns=/.test(s) ? '' : 'xmlns="http://www.w3.org/2000/svg" ';
+    s = s.replace('<svg ', '<svg ' + ns + 'width="' + w + '" height="' + h + '" ');
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+    return new Promise(res => {
+      const im = new Image();
+      im.onload = () => res({ img: im, w: w, h: h });
+      im.onerror = () => res(null);
+      im.src = url;
+    });
+  }
+
+  /* 中文沒有空白可以斷行，所以逐字量測換行 */
+  function wrapText(ctx, text, maxW) {
+    const out = [];
+    let line = '';
+    for (const ch of String(text)) {
+      if (ch === '\n') { out.push(line); line = ''; continue; }
+      const t = line + ch;
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = ch; }
+      else line = t;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  async function composeNoCardPhoto(L) {
+    const v = $('#cam-preview');
+    if (!v || !v.videoWidth) throw new Error('相機畫面尚未就緒');
+    const W = Math.min(v.videoWidth, 1440);
+    const H = Math.round(W * v.videoHeight / v.videoWidth);
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(v, 0, 0, W, H);
+
+    const FF = '"Microsoft JhengHei","Noto Sans TC",sans-serif';
+    const pad = Math.round(W * 0.05);
+    const panelW = W - pad * 2;
+    const inner = panelW - pad;
+
+    // 先量測需要多高，再畫底板（底板高度不能寫死，內容長短差很多）
+    ctx.font = 'bold ' + Math.round(W * 0.042) + 'px ' + FF;
+    const titleLines = wrapText(ctx, L.ar.title, inner);
+    ctx.font = Math.round(W * 0.028) + 'px ' + FF;
+    const ptLines = [];
+    L.ar.points.forEach(p => wrapText(ctx, '・' + p, inner).forEach(l => ptLines.push(l)));
+
+    const vis = await svgToImage(L.ar.visual);
+    let visW = vis ? inner : 0;                        // 教學圖等比縮到版心寬
+    let visH = vis ? Math.round(vis.h * visW / vis.w) : 0;
+
+    const lhT = Math.round(W * 0.055), lhP = Math.round(W * 0.042);
+    const kickH = Math.round(W * 0.05);
+    const topPad = pad * 0.75, botPad = pad * 0.9;
+
+    /* 底板高度必須「量出來」而不是寫死：相機是直式還是橫式、教學圖多高、
+       重點幾行，每一關都不一樣。量完若超過畫面就先縮圖、再砍掉最後幾行重點，
+       確保合成出來的照片不會有內容被裁掉。 */
+    let lines = ptLines.slice();
+    const contentH = () => topPad + kickH + titleLines.length * lhT +
+      (vis ? visH + pad * 0.5 : 0) + lines.length * lhP + botPad;
+    const maxH = H - pad * 1.6;
+    if (vis && contentH() > maxH) {
+      const room = Math.max(Math.round(H * 0.16), visH - (contentH() - maxH));
+      if (room < visH) { visH = room; visW = Math.round(vis.w * visH / vis.h); }
+    }
+    while (lines.length > 1 && contentH() > maxH) lines.pop();
+
+    const panelH = Math.min(contentH(), maxH);
+    const py = Math.max(pad * 0.6, Math.round((H - panelH) / 2));
+
+    ctx.fillStyle = 'rgba(11,31,58,0.74)';
+    roundRect(ctx, pad, py, panelW, panelH, Math.round(W * 0.03));
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(201,154,62,0.85)';
+    ctx.lineWidth = Math.max(2, Math.round(W * 0.004));
+    ctx.stroke();
+
+    let y = py + topPad;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#5FA98A';
+    ctx.font = 'bold ' + Math.round(W * 0.026) + 'px ' + FF;
+    ctx.fillText('關卡 ' + L.n + ' · ' + L.en, pad + pad * 0.5, y);
+    y += kickH;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold ' + Math.round(W * 0.042) + 'px ' + FF;
+    titleLines.forEach(l => { ctx.fillText(l, pad + pad * 0.5, y); y += lhT; });
+
+    if (vis) {
+      // 教學圖底下墊白：SVG 本身多半是淺色背景，疊在深色底板上才不會糊掉
+      const vx = Math.round(pad + (panelW - visW) / 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      roundRect(ctx, vx, y, visW, visH, Math.round(W * 0.014));
+      ctx.fill();
+      ctx.drawImage(vis.img, vx, y, visW, visH);
+      y += visH + pad * 0.5;
+    }
+
+    ctx.fillStyle = '#E2EEF4';
+    ctx.font = Math.round(W * 0.028) + 'px ' + FF;
+    lines.forEach(l => { ctx.fillText(l, pad + pad * 0.5, y); y += lhP; });
+
+    // 頁尾浮水印
+    const fh = Math.round(W * 0.062);
+    ctx.fillStyle = 'rgba(11,31,58,0.82)';
+    ctx.fillRect(0, H - fh, W, fh);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold ' + Math.round(W * 0.026) + 'px ' + FF;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('花蓮綠色化學闖關 · 關卡 ' + L.n + ' ' + L.title, Math.round(W * 0.03), H - fh / 2);
+    ctx.fillStyle = '#C99A3E';
+    ctx.textAlign = 'right';
+    ctx.fillText(new Date().toLocaleDateString('zh-TW'), W - Math.round(W * 0.03), H - fh / 2);
+    ctx.textAlign = 'left';
+
+    return cv;
+  }
+
+  async function shootNoCard() {
+    const L = cur();
+    let cv;
+    try { cv = await composeNoCardPhoto(L); }
+    catch (e) { console.warn('[nocard] compose failed', e); return toast('相機畫面還沒準備好，請稍等一下再拍'); }
+
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if (!blob) return toast('這個瀏覽器無法產生照片，請直接截圖');
+    if (NOCARD.photoUrl) { try { URL.revokeObjectURL(NOCARD.photoUrl); } catch (e) {} }
+    NOCARD.photoUrl = URL.createObjectURL(blob);
+    const name = '花蓮綠色化學闖關_關卡' + L.n + '_' +
+                 new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.png';
+    $('#nocard-photo-img').src = NOCARD.photoUrl;
+    const a = $('#nocard-dl');
+    a.href = NOCARD.photoUrl;
+    a.setAttribute('download', name);
+    $('#nocard-photo').classList.remove('hidden');
+    try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) {}
+    return blob;
   }
 
   function showTeach(L) {
     $('#ar-scanning').classList.add('hidden');
+    $('#ar-scanning').classList.remove('plain');
     $('#ar-intro').classList.add('hidden');
     $('#ar-fallback').classList.add('hidden');
+    hideNoCard();
     $('#teach-en').textContent = L.en;
     $('#teach-title').textContent = L.ar.title;
     $('#teach-visual').innerHTML = VISUALS.svg(L.ar.visual);
@@ -568,21 +858,45 @@
     $$('.mode-card').forEach(b => b.addEventListener('click', () => startRun(+b.dataset.mode)));
 
     $('#btn-scan').addEventListener('click', enterAR);
-    // iOS 要求 getUserMedia 必須在使用者手勢中呼叫 —— 因此綁在按鈕的 click 上
-    $('#btn-cam').addEventListener('click', startCamera);
-    $('#btn-nocam').addEventListener('click', () => {
-      $('#ar-intro').classList.add('hidden');
-      $('#ar-fallback').classList.remove('hidden');
+    /* v1.3 三個明確模式。iOS 要求 getUserMedia 必須在使用者手勢中呼叫，
+       所以 startCamera／startNoCard 都直接綁在按鈕的 click 上，中間不 await 任何東西。 */
+    $('#btn-mode-scan').addEventListener('click', startCamera);
+    $('#btn-mode-nocard').addEventListener('click', startNoCard);
+    $('#btn-mode-skip').addEventListener('click', () => {
+      saveMode('skip');
+      showTeach(cur());
+      toast('已跳過掃描，教學內容照樣完整');
     });
     $('#btn-ar-back').addEventListener('click', async () => {
-      stopHealthCheck(); clearSuccess(); await AR.stop(); show('scr-explore'); startLoop();
+      stopHealthCheck(); clearSuccess(); hideNoCard(); await AR.stop(); show('scr-explore'); startLoop();
+    });
+
+    // 免卡體驗層
+    $('#btn-nocard-shot').addEventListener('click', shootNoCard);
+    $('#btn-nocard-go').addEventListener('click', async () => {
+      const L = cur();
+      hideNoCard();
+      await AR.stop();                 // 關掉相機串流（相機燈熄滅）再進教學
+      showTeach(L);
+    });
+    $('#btn-nocard-back').addEventListener('click', async () => {
+      hideNoCard();
+      await AR.stop();
+      $('#ar-intro').classList.remove('hidden');
+      markLastMode();
+    });
+    $('#btn-nocard-photo-close').addEventListener('click', () => {
+      $('#nocard-photo').classList.add('hidden');
     });
     $('#btn-scan-cancel').addEventListener('click', async () => {
       stopHealthCheck();
       clearSuccess();
+      hideNoCard();
       await AR.stop();
       $('#ar-scanning').classList.add('hidden');
+      $('#ar-scanning').classList.remove('plain');
       $('#ar-intro').classList.remove('hidden');
+      markLastMode();
     });
     // v1.2 掃描成功後的大型主按鈕：立刻進入教學（不必等倒數跑完）
     $('#btn-ar-teach').addEventListener('click', enterTeachFromScan);
@@ -611,9 +925,9 @@
     bindDpad();
     addEventListener('resize', relayoutExplore);
     addEventListener('orientationchange', () => setTimeout(relayoutExplore, 250));
-    addEventListener('pagehide', () => { stopHealthCheck(); clearSuccess(); AR.stop(); });
+    addEventListener('pagehide', () => { stopHealthCheck(); clearSuccess(); hideNoCard(); AR.stop(); });
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { stopHealthCheck(); clearSuccess(); AR.stop(); }
+      if (document.hidden) { stopHealthCheck(); clearSuccess(); hideNoCard(); AR.stop(); }
     });
   }
 
@@ -680,7 +994,12 @@
     startCamera, failCamera, copyDiag, inAppBanner,
     healthCheck, stopHealthCheck, scanStatus, scanHint, scanWait,
     // v1.2 掃描成功銜接驗收用
-    scanSuccess, enterTeachFromScan, clearSuccess, successState: () => Object.assign({}, SUC)
+    scanSuccess, enterTeachFromScan, clearSuccess, successState: () => Object.assign({}, SUC),
+    // v1.3 三模式／萬用卡／免卡體驗驗收用
+    loadMode, saveMode, markLastMode, MODE_KEY,
+    startNoCard, buildNoCard, hideNoCard, shootNoCard, composeNoCardPhoto,
+    svgToImage, wrapText, bindTilt,
+    nocardState: () => Object.assign({}, NOCARD)
   };
 
   bind();

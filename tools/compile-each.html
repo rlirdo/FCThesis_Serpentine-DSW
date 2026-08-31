@@ -2,40 +2,104 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>MindAR 逐關目標編譯器</title>
+<title>MindAR 逐關目標編譯器（v1.3 雙目標）</title>
 <style>body{font-family:sans-serif;padding:24px;background:#0B1F3A;color:#fff}
 #log{white-space:pre-wrap;font:13px/1.6 monospace;background:#04121f;padding:12px;border-radius:8px;max-height:70vh;overflow:auto}</style>
 </head>
 <body>
-<h1>MindAR 逐關目標編譯器</h1>
-<p>每一關各編譯成獨立的 targets/levelNN.mind，讓手機每關只下載一個小檔。</p>
+<h1>MindAR 逐關目標編譯器（v1.3 雙目標）</h1>
+<p>每一關編譯成 <b>targets/levelNN.mind</b>，內含 <b>兩個</b> target：<br>
+　target 0 ＝ 該關專屬關鍵圖片　levelNN.png<br>
+　target 1 ＝ 遊戲萬用卡　universal.png（一張卡玩到底）</p>
 <div id="log">等待載入函式庫…</div>
+<script>
+/* ── 編譯必備的節流解除（必須早於 mindar bundle 載入）──
+   MindAR 的 Compiler 每處理一個尺度層就 `await new Promise(r=>requestAnimationFrame(r))`
+   （bundle 內的 Xc()／$T）。瀏覽器分頁一旦不可見，requestAnimationFrame 完全停擺，
+   編譯會卡在第一張圖永遠不動；setTimeout 在隱藏分頁也被夾到 1 秒一次。
+   這一頁是離線建置工具、不需要畫面更新，因此把兩者都改接 MessageChannel
+   （postMessage 不受可見度節流），編譯就能在背景分頁全速跑完。
+   bundle 在載入當下就會把 requestAnimationFrame 抓進區域變數，所以順序不能顛倒。 */
+(function () {
+  var ch = new MessageChannel(), q = [];
+  ch.port1.onmessage = function () { var f = q.shift(); if (f) f(); };
+  var flush = function (fn) { q.push(fn); ch.port2.postMessage(0); };
+  var rafId = 0;
+  window.requestAnimationFrame = function (cb) {
+    var id = ++rafId;
+    flush(function () { cb(performance.now()); });
+    return id;
+  };
+  window.cancelAnimationFrame = function () {};
+  var origTimeout = window.setTimeout;
+  window.setTimeout = function (fn, ms) {
+    if (typeof fn === 'function' && (!ms || ms <= 20)) {
+      var a = Array.prototype.slice.call(arguments, 2);
+      flush(function () { fn.apply(null, a); });
+      return -1;
+    }
+    return origTimeout.apply(window, arguments);
+  };
+})();
+</script>
 <script src="../vendor/mindar-image-aframe.prod.js"></script>
 <script>
 const logEl = document.getElementById('log');
 const L = m => { logEl.textContent += '\n' + m; logEl.scrollTop = 1e9; };
-window.__done = false; window.__err = null; window.__sizes = [];
+window.__done = false; window.__err = null; window.__report = [];
 
 const loadImg = src => new Promise((res, rej)=>{
   const i = new Image(); i.crossOrigin='anonymous';
   i.onload=()=>res(i); i.onerror=()=>rej(new Error('load fail '+src)); i.src=src;
 });
 
+/* 特徵點統計：matchingData 為多個尺度層，各層含 maximaPoints / minimaPoints。
+   為了不綁死單一版本的欄位名，這裡對任何看起來像點陣列的欄位一律累加。 */
+function countPoints(levels){
+  let n = 0;
+  (levels || []).forEach(lv => {
+    if (!lv) return;
+    ['maximaPoints','minimaPoints','points'].forEach(k=>{
+      if (Array.isArray(lv[k])) n += lv[k].length;
+    });
+  });
+  return n;
+}
+
 (async ()=>{
   try{
+    const uni = await loadImg('../assets/targets/universal.png');
+    L('萬用卡載入完成：' + uni.naturalWidth + '×' + uni.naturalHeight);
     for(let n=1;n<=10;n++){
       const id = String(n).padStart(2,'0');
       const im = await loadImg('../assets/targets/level'+id+'.png');
       const compiler = new window.MINDAR.IMAGE.Compiler();
       const t0 = performance.now();
-      await compiler.compileImageTargets([im], ()=>{});
+      // ★ 兩張圖一起編譯：索引 0 = 關卡卡，索引 1 = 萬用卡
+      await compiler.compileImageTargets([im, uni], ()=>{});
       const buf = await compiler.exportData();
+
+      // ── 立即以 importData 驗證這個 .mind ──
+      const verifier = new window.MINDAR.IMAGE.Compiler();
+      const data = verifier.importData(buf);
+      const targets = data.length;
+      const pts = data.map(d => countPoints(d.matchingData));
+      const trk = data.map(d => countPoints(d.trackingData));
+      const dims = data.map(d => d.targetImage.width + '×' + d.targetImage.height);
+      const ok = targets === 2 && pts.every(p => p > 300);
+
       const r = await fetch('/__save/level'+id+'.mind', {method:'POST', body: buf});
       await r.text();
-      window.__sizes.push(buf.byteLength);
-      L('level'+id+'.mind  '+(buf.byteLength/1024).toFixed(0)+' KB  ('+((performance.now()-t0)/1000).toFixed(1)+'s)');
+
+      window.__report.push({ level:n, bytes:buf.byteLength, targets, points:pts, tracking:trk, dims, ok });
+      L((ok?'✓ ':'✗ ')+'level'+id+'.mind  '+(buf.byteLength/1024).toFixed(0)+' KB  targets='+targets+
+        '  特徵點=['+pts.join(', ')+']  追蹤點=['+trk.join(', ')+']  ('+((performance.now()-t0)/1000).toFixed(1)+'s)');
     }
-    L('全部完成。總計 '+(window.__sizes.reduce((a,b)=>a+b,0)/1048576).toFixed(2)+' MB');
+    const total = window.__report.reduce((a,b)=>a+b.bytes,0);
+    const allOk = window.__report.every(r=>r.ok);
+    L('─────────────────────────────');
+    L((allOk?'全部通過：':'有項目未通過：')+window.__report.filter(r=>r.ok).length+' / 10');
+    L('總計 '+(total/1048576).toFixed(2)+' MB');
     window.__done = true;
   }catch(e){ window.__err = String(e&&e.stack||e); L('錯誤：'+window.__err); window.__done = true; }
 })();
