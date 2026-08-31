@@ -37,7 +37,7 @@
    5. 【內建瀏覽器】LINE 自動導向外部瀏覽器；FB / IG / 微信顯示逃生指引。 */
 window.AR = (function () {
 
-  const VERSION = '1.3';
+  const VERSION = '1.4';
 
   let host = null, sceneEl = null, running = false, mo = null;
   let onFoundCb = null, onLostCb = null;
@@ -347,7 +347,7 @@ window.AR = (function () {
   /* ═══════════ 背景載入 .mind（轉成 blob URL，MindAR 就不必再抓一次） ═══════════ */
   const mindCache = {};
   function targetPath(level) {
-    return 'targets/level' + String(level.n).padStart(2, '0') + '.mind';
+    return 'targets/level' + String(level.n).padStart(2, '0') + '.mind?v=' + VERSION;
   }
   async function prefetchTarget(level) {
     const path = targetPath(level);
