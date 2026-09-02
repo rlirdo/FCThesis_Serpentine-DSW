@@ -98,13 +98,16 @@
     '第五式　Mg²⁺ 補進晶格缺陷【假說】','第六式　超音波空化',
     '第七式　兩個要防的副反應','第八式　AgNO₃ 洗滌檢驗'
   ];
+  /* v1.1：萬用卡與關卡卡都重畫過（文字自動縮排、不再溢出或重疊），
+     圖檔一律帶版本參數，手機才不會沿用舊卡片的快取。 */
+  var V = '1.1';
   var CARDS = [{
-    src:'assets/targets/universal.png', uni:true,
+    src:'assets/targets/universal.png?v='+V, uni:true,
     title:'遊戲萬用卡', sub:'一張卡玩到底 — 任何一關都能掃這張'
   }];
   for (var i=0;i<12;i++){
     CARDS.push({
-      src:'assets/targets/level'+String(i+1).padStart(2,'0')+'.png', uni:false,
+      src:'assets/targets/level'+String(i+1).padStart(2,'0')+'.png?v='+V, uni:false,
       title:TITLES[i], sub:'關卡 '+(i+1)+' ／ 12'
     });
   }

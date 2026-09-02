@@ -37,7 +37,7 @@
    5. 【內建瀏覽器】LINE 自動導向外部瀏覽器；FB / IG / 微信顯示逃生指引。 */
 window.AR = (function () {
 
-  const VERSION = '1.0';
+  const VERSION = '1.1';
 
   let host = null, sceneEl = null, running = false, mo = null;
   let onFoundCb = null, onLostCb = null;

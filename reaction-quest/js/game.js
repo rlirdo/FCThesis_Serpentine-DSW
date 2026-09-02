@@ -31,6 +31,13 @@
     const el = $('#' + id);
     if (el) el.scrollTop = 0;
     if (id !== 'scr-explore') stopTimer();
+    /* WebGL context 是稀有資源：離開哪一頁就把那一頁的 a-scene 收掉 */
+    if (window.CHAR3D) {
+      if (id === 'scr-char') CHAR3D.mountPreviews('#char-list .char-3d');
+      else CHAR3D.destroyPreviews();
+      if (id !== 'scr-explore' && id !== 'scr-ar') CHAR3D.destroy();
+    }
+    if (id !== 'scr-quiz' && window.QUIZ) QUIZ.teardown();
   }
   function toast(msg, ms = 2400) {
     const t = $('#toast'); t.textContent = msg; t.classList.add('on');
@@ -63,11 +70,14 @@
   }
 
   /* ───────── 主角選擇 ───────── */
+  /* v1.1：選角改用會自轉的 3D 預覽（沒有 A-Frame 時退回原本的 SVG 圖） */
   function buildCharList() {
     const wrap = $('#char-list');
+    const has3d = !!(window.AFRAME && window.CHAR3D);
     wrap.innerHTML = D.CHARS.map(c => `
       <button class="char-card" data-char="${c.id}">
-        <img src="assets/chars/${c.id}.svg" alt="${c.name}">
+        <div class="char-3d" data-char3d="${c.id}">${
+          has3d ? '' : `<img src="assets/chars/${c.id}.svg" alt="${c.name}">`}</div>
         <div class="char-info">
           <h3>${c.name}</h3>
           <p class="ct" style="color:${c.color}">${c.title}</p>
@@ -100,17 +110,37 @@
      ═══════════════════════════════════════════════════════════ */
   const M = {
     maze: null,          // MAZE.gen 產出的資料
-    px: 0, py: 0,        // 主角所在格
+    from: 0,             // 目前所在格（整數索引）；t=0 時就站在它的中心
+    dir: 'down',         // 目前身處的走廊方向（from → 相鄰格）
+    t: 0,                // 走廊上的次格進度：0、1/3、2/3（到 1 立刻結算成新的 from）
+    vx: 0, vy: 0,        // 視覺座標（格為單位的浮點數，平滑補間用）
+    intent: null,        // 預轉向緩衝 { dir, at }
+    raf: 0,              // 補間動畫的 rAF
+    lastT: 0,
     got: [],             // 已蒐集的代幣索引
     rect: null,          // 目前的可視矩形與格子大小
     hold: 0,             // 長按重複移動的計時器
+    holdDir: null,
     timer: 0, left: 0,   // 限時挑戰
     ready: false         // 三代幣到齊、終點開啟
   };
   const GAP = 8;         // 與 UI 之間的安全間距（px）
 
+  /* ── v1.1 次格步進參數 ──────────────────────────────────────
+     使用者實測回報：「每一步距離要再縮小」「轉彎時無法順利轉彎」。
+     STEP  一次點按只前進 1/3 格（碰撞判定仍以「格」為單位）
+     HOLD  按住時每 180 ms 走一次次格步
+     GLIDE 每一次次格步的補間時間，必須短於 HOLD 才不會追撞
+     BUFFER 預轉向緩衝的有效期：抵達路口前先按了垂直方向，記住這個意圖 */
+  const STEP = 1 / 3, HOLD = 180, GLIDE = 130, BUFFER = 700;
+
   /* 可視矩形：上緣＝.hud-top 下緣、下緣＝.hud-bottom 上緣（執行期量測），
-     所以主角／代幣／終點永遠不會被方向鍵或掃描鈕蓋住。 */
+     所以主角／代幣／終點永遠不會被方向鍵或掃描鈕蓋住。
+     v1.1 追加 headroom：3D 主角站在格中心、身高約一格，會往上長出去，
+     因此先把上緣多留 0.72 格再配版，最上排的角色才不會被上方資訊列切到。
+     0.72 是量出來的：容器高 1.9 格、鏡頭 fov 46 / 距離 1.85，角色從腳底（容器 81.8%）
+     到頭頂（容器 20.1%）＝ 0.618 × 1.9 ＝ 1.173 格，扣掉半格的格心偏移剩 0.673 格，
+     再留一點餘裕。 */
   function mazeRect() {
     const st = $('#stage').getBoundingClientRect();
     const top = $('.hud-top').getBoundingClientRect();
@@ -120,13 +150,18 @@
     const availH = Math.max(60, availBot - availTop);
     const availW = Math.max(60, st.width - 16);
     const m = M.maze;
-    if (!m) return { x: 8, y: availTop, w: availW, h: availH, cell: 24, cols: 1, rows: 1 };
-    const cell = Math.max(14, Math.floor(Math.min(availW / m.cols, availH / m.rows)));
+    if (!m) return { x: 8, y: availTop, w: availW, h: availH, cell: 24, cols: 1, rows: 1, head: 0 };
+    let cell = Math.max(14, Math.floor(Math.min(availW / m.cols, availH / m.rows)));
+    for (let k = 0; k < 3; k++) {
+      const head = Math.round(cell * 0.72);
+      cell = Math.max(14, Math.floor(Math.min(availW / m.cols, (availH - head) / m.rows)));
+    }
+    const head = Math.round(cell * 0.72);
     const w = cell * m.cols, h = cell * m.rows;
     return {
       x: Math.round(st.width / 2 - w / 2),
-      y: Math.round(availTop + (availH - h) / 2),
-      w: w, h: h, cell: cell, cols: m.cols, rows: m.rows,
+      y: Math.round(availTop + head + Math.max(0, (availH - head - h) / 2)),
+      w: w, h: h, cell: cell, cols: m.cols, rows: m.rows, head: head,
       availTop: availTop, availBot: availBot
     };
   }
@@ -198,7 +233,11 @@
     g.style.left = (gp.x + c / 2) + 'px';
     g.style.top = (gp.y + c / 2) + 'px';
 
-    // 主角
+    // 主角（3D 場景容器；沒有 A-Frame 時退回 SVG 平面圖）
+    const box3 = $('#hero3d');
+    const hs3 = Math.round(c * 1.9);
+    box3.style.width = hs3 + 'px';
+    box3.style.height = hs3 + 'px';
     const hero = $('#hero');
     const hs = Math.round(c * 0.82);
     hero.style.width = hs + 'px';
@@ -227,11 +266,58 @@
     const m = M.maze, c = M.rect.cell;
     return { x: (i % m.cols) * c, y: ((i / m.cols) | 0) * c };
   }
+
+  /* ── 邏輯座標 ↔ 視覺座標 ──
+     邏輯：from（格）＋ dir（走廊方向）＋ t（0、1/3、2/3）
+     視覺：vx / vy 為格單位的浮點數，用固定速度追向邏輯目標，所以移動是連續的。 */
+  const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const OPP = { up: 'down', down: 'up', left: 'right', right: 'left' };
+  const cx = i => M.maze ? (i % M.maze.cols) : 0;
+  const cy = i => M.maze ? ((i / M.maze.cols) | 0) : 0;
+  function goalXY() {
+    const d = DIRV[M.dir] || [0, 1];
+    return { x: cx(M.from) + d[0] * M.t, y: cy(M.from) + d[1] * M.t };
+  }
+  function neighbor(i, dir) {
+    const d = DIRV[dir];
+    return (cy(i) + d[1]) * M.maze.cols + (cx(i) + d[0]);
+  }
+
   function drawHero() {
+    if (!M.rect || !M.maze) return;
     const c = M.rect.cell;
+    const px = M.vx * c + c / 2, py = M.vy * c + c / 2;
+    const box3 = $('#hero3d');
+    if (box3) { box3.style.left = px + 'px'; box3.style.top = py + 'px'; }
     const hero = $('#hero');
-    hero.style.left = (M.px * c + c / 2) + 'px';
-    hero.style.top = (M.py * c + c / 2) + 'px';
+    if (hero) { hero.style.left = px + 'px'; hero.style.top = py + 'px'; }
+  }
+
+  /* 補間迴圈：把 vx/vy 以固定速度推向邏輯目標；到位就停掉 rAF（省電） */
+  function glide() {
+    M.raf = 0;
+    if (!M.maze || !M.rect) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - (M.lastT || now)) / 1000);
+    M.lastT = now;
+    const g = goalXY();
+    const speed = STEP / (GLIDE / 1000);          // 格/秒
+    let dx = g.x - M.vx, dy = g.y - M.vy;
+    const dist = Math.hypot(dx, dy);
+    const mv = speed * dt;
+    if (dist <= mv || dist < 0.0005) { M.vx = g.x; M.vy = g.y; }
+    else { M.vx += dx / dist * mv; M.vy += dy / dist * mv; }
+    drawHero();
+    const arrived = (Math.abs(g.x - M.vx) < 0.0005 && Math.abs(g.y - M.vy) < 0.0005);
+    if (window.CHAR3D) CHAR3D.setMoving(!arrived);
+    if (!arrived) M.raf = requestAnimationFrame(glide);
+  }
+  function kick() { M.lastT = performance.now(); if (!M.raf) M.raf = requestAnimationFrame(glide); }
+  function snapVisual() {
+    const g = goalXY();
+    M.vx = g.x; M.vy = g.y;
+    drawHero();
+    if (window.CHAR3D) CHAR3D.setMoving(false);
   }
 
   function enterLevel() {
@@ -250,14 +336,34 @@
     M.maze = MAZE.gen(L.maze);
     M.got = [];
     M.ready = false;
-    M.px = M.maze.start % M.maze.cols;
-    M.py = (M.maze.start / M.maze.cols) | 0;
+    M.from = M.maze.start;
+    M.dir = 'down'; M.t = 0; M.intent = null;
+    M.vx = cx(M.from); M.vy = cy(M.from);
 
     show('scr-explore');           // 先顯示才量得到版面尺寸
     M.rect = mazeRect();
+    mountHero();
     renderMaze();
+    snapVisual();
     updateTokenHud();
     startTimer(L);
+  }
+
+  /* 3D 主角：進迷宮時掛上、進掃描模式時銷毀（兩個 a-scene 絕不同時存在） */
+  function mountHero() {
+    const host = $('#hero3d');
+    if (!host || !S.char) return null;
+    const ok = window.CHAR3D && window.AFRAME ? CHAR3D.mount(host, S.char.id) : null;
+    host.classList.toggle('off', !ok);
+    $('#hero').classList.toggle('off', !!ok);      // 有 3D 就不顯示 SVG 退路
+    if (ok) CHAR3D.face(M.dir);
+    return ok;
+  }
+  function unmountHero() {
+    if (window.CHAR3D) CHAR3D.destroy();
+    const host = $('#hero3d');
+    if (host) host.classList.add('off');
+    $('#hero').classList.remove('off');
   }
 
   function updateTokenHud() {
@@ -295,37 +401,129 @@
   function stopTimer() { if (M.timer) { clearInterval(M.timer); M.timer = 0; } }
 
   function backToStart() {
-    M.px = M.maze.start % M.maze.cols;
-    M.py = (M.maze.start / M.maze.cols) | 0;
-    drawHero();
+    M.from = M.maze.start;
+    M.dir = 'down'; M.t = 0; M.intent = null;
+    snapVisual();
+    if (window.CHAR3D) CHAR3D.face('down');
     checkGoal();
   }
 
-  /* ── 一次走一格 ── */
-  function step(dir) {
+  /* ═══════════════════════════════════════════════════════════
+     v1.1 次格步進 ＋ 預轉向緩衝（cornering assist）
+     ── 狀態機 ────────────────────────────────────────────────
+       from  目前所在格；t = 0 時角色就站在它的正中心
+       dir   目前佔用的走廊方向（from → 相鄰格，該走廊必定是通的）
+       t     0 / 1/3 / 2/3；一旦到 1 就立刻結算成「抵達相鄰格」（from 換人、t 歸零）
+     ── 按下一個方向時 ────────────────────────────────────────
+       ① t = 0（站在格中心）：該方向通 → 轉向並走 1/3 格；不通 → 撞牆回饋
+       ② 與 dir 同向：t += 1/3（到 1 就結算抵達，並觸發陷阱／代幣／終點判定）
+       ③ 與 dir 反向：t -= 1/3（退回；到 0 就回到格中心）
+       ④ 與 dir 垂直：記下「意圖」，這就是預轉向緩衝——
+          ・若此刻剛好在格中心且該方向可通 → 立刻轉
+          ・若正在走 → 等抵達下一個格中心時自動轉（並吸附到中心）
+          ・若停在走廊中段 → 先吸附到最近的格中心（t ≥ 0.5 前進、否則後退），再轉
+     這樣就不會再出現「按了方向卻沒轉、卡在轉角」的情形；
+     碰撞判定全程仍以「格」為單位，與 v1.0 完全一致。 */
+
+  function bump() {
+    ['#hero3d', '#hero'].forEach(sel => {
+      const el = $(sel);
+      if (!el) return;
+      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    });
+    try { if (navigator.vibrate) navigator.vibrate(18); } catch (e) {}
+  }
+
+  function canMove() {
     if (!M.maze || !$('#scr-explore').classList.contains('active')) return false;
     if (!$('#trap-panel').classList.contains('hidden')) return false;   // 陷阱說明中不能動
-    if (!MAZE.open(M.maze, M.px, M.py, dir)) {
-      const hero = $('#hero');
-      hero.classList.remove('bump'); void hero.offsetWidth; hero.classList.add('bump');
-      return false;
-    }
-    const d = MAZE.DIRS.find(v => v.d === dir);
-    M.px += d.dx; M.py += d.dy;
-    if (d.dx) $('#hero').classList.toggle('flip', d.dx < 0);
-    drawHero();
-    const i = M.py * M.maze.cols + M.px;
+    return true;
+  }
 
-    // 陷阱
+  function faceDir(dir) {
+    M.dir = dir;
+    if (window.CHAR3D) CHAR3D.face(dir);
+    const d = DIRV[dir];
+    if (d[0]) $('#hero').classList.toggle('flip', d[0] < 0);
+  }
+
+  /* 抵達相鄰格：結算 from／t，並觸發該格的陷阱、代幣、終點判定 */
+  function arrive() {
+    M.from = neighbor(M.from, M.dir);
+    M.t = 0;
+    const i = M.from;
     const tr = M.maze.traps.find(t => t.i === i);
-    if (tr) { hitTrap(tr); return true; }
-
-    // 代幣
+    if (tr) { M.intent = null; kick(); hitTrap(tr); return true; }
     const ti = M.maze.tokens.indexOf(i);
     if (ti >= 0 && M.got.indexOf(ti) < 0) pickToken(ti);
-
     checkGoal();
+    tryTurn();                                   // 預轉向：抵達路口就自動轉
+    kick();
     return true;
+  }
+
+  /* 把 t 推到目標值（>=1 就結算抵達） */
+  function setT(nt) {
+    if (nt >= 1 - 1e-9) return arrive();
+    M.t = Math.max(0, Math.round(nt * 3) / 3);
+    kick();
+    return true;
+  }
+
+  /* 吸附到最近的格中心：t >= 0.5 前進到下一格，否則退回原格 */
+  function settle() {
+    if (!M.maze) return false;
+    if (M.t === 0) return true;
+    if (M.t >= 0.5) return arrive();
+    M.t = 0; kick();
+    return true;
+  }
+
+  /* 消化預轉向緩衝。回傳是否真的轉了。 */
+  function tryTurn() {
+    const it = M.intent;
+    if (!it) return false;
+    if (performance.now() - it.at > BUFFER) { M.intent = null; return false; }
+    if (M.t !== 0) return false;                 // 還沒走到格中心，等抵達再說
+    if (!MAZE.open(M.maze, cx(M.from), cy(M.from), it.dir)) return false;
+    M.intent = null;
+    faceDir(it.dir);
+    return setT(STEP);
+  }
+
+  /* 對外的單次「按一下方向鍵」。回傳是否有任何位移或轉向。 */
+  function press(dir) {
+    if (!canMove() || !DIRV[dir]) return false;
+    if (M.t === 0) {
+      if (!MAZE.open(M.maze, cx(M.from), cy(M.from), dir)) {
+        /* 站在格中心卻撞牆：如果緩衝裡有別的可通方向，順手幫他轉過去 */
+        M.intent = { dir: dir, at: performance.now() };
+        if (tryTurn()) return true;
+        M.intent = null;
+        bump();
+        return false;
+      }
+      faceDir(dir);
+      return setT(STEP);
+    }
+    if (dir === M.dir) return setT(M.t + STEP);
+    if (dir === OPP[M.dir]) return setT(M.t - STEP);
+    /* 垂直方向＝轉向意圖 */
+    M.intent = { dir: dir, at: performance.now() };
+    if (tryTurn()) return true;
+    if (M.hold) return true;                     // 正在長按前進 → 等抵達路口自動轉
+    /* 停在走廊中段：先吸附到最近格中心，再轉 */
+    settle();
+    if (tryTurn()) return true;
+    if (!MAZE.open(M.maze, cx(M.from), cy(M.from), dir)) { M.intent = null; bump(); return false; }
+    return true;
+  }
+
+  /* v1.0 相容名稱：整格移動（測試與舊呼叫點用），內部走三次次格步 */
+  function step(dir) {
+    let ok = false;
+    for (let k = 0; k < 3; k++) ok = press(dir) || ok;
+    return ok;
   }
 
   function pickToken(ti) {
@@ -367,7 +565,7 @@
 
   function checkGoal() {
     const L = cur();
-    const i = M.py * M.maze.cols + M.px;
+    const i = M.from;
     const atGoal = (i === M.maze.goal);
     const ok = atGoal && M.got.length >= 3;
     M.ready = ok;
@@ -393,19 +591,37 @@
     if (!$('#scr-explore').classList.contains('active') || !M.maze) return;
     M.rect = mazeRect();
     renderMaze();
+    snapVisual();
   }
 
-  /* 方向鍵：觸控 ＋ 滑鼠 ＋ 鍵盤。按一下走一格，長按每 200 ms 續走一格。 */
+  /* 停手之後的中心吸附：若已經走過半格（t ≥ 1/2），自動補完剩下的距離站到格中心，
+     這樣「看起來已經站在代幣格上、卻沒撿到」的落差就不會發生；
+     只走了 1/3 格則維持原地，那才是次格步進要的細膩手感。 */
+  function scheduleSettle() {
+    clearTimeout(scheduleSettle._t);
+    scheduleSettle._t = setTimeout(() => {
+      if (M.hold || !canMove()) return;
+      if (M.t >= 0.5) arrive();
+    }, 250);
+  }
+
+  /* 方向鍵：觸控 ＋ 滑鼠 ＋ 鍵盤。
+     按一下走 1/3 格；長按每 180 ms 續走一次次格步（＝連續慢走）。 */
   function bindDpad() {
     $$('.dbtn').forEach(b => {
       const dir = b.dataset.dir;
       const on = e => {
         e.preventDefault();
-        step(dir);
+        press(dir);
         clearInterval(M.hold);
-        M.hold = setInterval(() => step(dir), 200);
+        M.holdDir = dir;
+        M.hold = setInterval(() => press(dir), HOLD);
       };
-      const off = e => { if (e) e.preventDefault(); clearInterval(M.hold); M.hold = 0; };
+      const off = e => {
+        if (e) e.preventDefault();
+        clearInterval(M.hold); M.hold = 0; M.holdDir = null;
+        scheduleSettle();
+      };
       b.addEventListener('pointerdown', on);
       b.addEventListener('pointerup', off);
       b.addEventListener('pointerleave', off);
@@ -421,15 +637,17 @@
       e.preventDefault();
       if (downKey === k) return;                 // 系統自動重複交給我們自己的計時器
       downKey = k;
-      step(k);
+      press(k);
       clearInterval(M.hold);
-      M.hold = setInterval(() => step(k), 200);
+      M.holdDir = k;
+      M.hold = setInterval(() => press(k), HOLD);
     });
     addEventListener('keyup', e => {
       const k = KEY[e.key]; if (!k) return;
       e.preventDefault();
       if (downKey === k) downKey = null;
-      clearInterval(M.hold); M.hold = 0;
+      clearInterval(M.hold); M.hold = 0; M.holdDir = null;
+      scheduleSettle();
     });
   }
 
@@ -457,12 +675,15 @@
   function enterAR() {
     const L = cur();
     stopTimer();
+    /* 探索模式與掃描模式的 a-scene 絕不同時存在：先把 3D 主角整個銷毀，
+       WebGL context 與 rAF 都收回，MindAR 的 a-scene 才有完整資源可用。 */
+    unmountHero();
     clearSuccess();
     hideNoCard();
     $('#ar-intro-title').textContent = '關卡 ' + L.n + '：' + L.title;
     $('#ar-lead').innerHTML =
       '用<b>「萬用卡」</b>可以一張玩到底；有十二張卡片組的話，本關請掃<b>第 ' + L.n + ' 號卡</b>。';
-    $('#fb-img').src = 'assets/targets/level' + String(L.n).padStart(2, '0') + '.png';
+    $('#fb-img').src = 'assets/targets/level' + String(L.n).padStart(2, '0') + '.png?v=1.1';
     markLastMode();
     $('#ar-intro').classList.remove('hidden');
     $('#ar-fallback').classList.add('hidden');
@@ -902,47 +1123,57 @@
     show('scr-quiz');
   }
 
+  /* v1.1：每關兩題一律取用互動題資料（QUIZ_DATA）；
+     data.js 裡的 v1.0 文字選擇題保留為最後的降級退路。 */
+  function quizList(L) {
+    return (window.QUIZ_DATA && QUIZ_DATA[L.n]) || L.quiz;
+  }
+  const KIND = {
+    tap3d: 'AR 互動題 ・ 點選 3D 物件',
+    drag3d: 'AR 互動題 ・ 拖曳到正確位置',
+    'anim/time': '動畫影片題 ・ 點出關鍵時刻',
+    'anim/pick': '動畫影片題 ・ 點出關鍵段落',
+    order: '互動排序題 ・ 步驟卡拖曳排序'
+  };
+  function kindOf(q) { return KIND[q.type + (q.ask ? '/' + q.ask : '')] || '互動題'; }
+
   function paintQuiz() {
-    const L = cur(), q = L.quiz[Q.i];
+    const L = cur(), list = quizList(L), q = list[Q.i];
     $('#quiz-level').textContent = '關卡 ' + L.n + '　' + L.title;
-    $('#quiz-step').textContent = '第 ' + (Q.i + 1) + ' 題 / 共 ' + L.quiz.length + ' 題';
+    $('#quiz-step').textContent = '第 ' + (Q.i + 1) + ' 題 / 共 ' + list.length + ' 題';
+    $('#quiz-kind').textContent = kindOf(q);
+    $('#quiz-hypo').classList.toggle('hidden', !q.hypo);
     $('#quiz-q').textContent = q.q;
-    $('#quiz-opts').innerHTML = q.opts
-      .map((o, i) => `<button class="opt" data-i="${i}">${'ABCD'[i]}．${o}</button>`).join('');
     $('#quiz-fb').className = 'quiz-fb hidden';
     $('#quiz-fb').innerHTML = '';
     $('#btn-quiz-next').classList.add('hidden');
-    $$('#quiz-opts .opt').forEach(b => b.addEventListener('click', () => answer(+b.dataset.i)));
+    QUIZ.render($('#quiz-stage'), q, onQuizAnswer);
     $('#scr-quiz').scrollTop = 0;
   }
 
-  function answer(i) {
-    const L = cur(), q = L.quiz[Q.i];
+  /* 互動題的判定回呼：答對 → 解析＋繼續；答錯 → 提示，可以重試（不扣機會，只計次） */
+  function onQuizAnswer(ok, hint) {
+    const L = cur(), list = quizList(L), q = list[Q.i];
     S.tries++;
     const fb = $('#quiz-fb');
-    if (i === q.a) {
-      $$('#quiz-opts .opt').forEach(b => {
-        b.disabled = true;
-        if (+b.dataset.i === q.a) b.classList.add('ok');
-      });
+    if (ok) {
       fb.className = 'quiz-fb ok';
       fb.innerHTML = '<b>答對了！</b>' + q.why;
-      const last = Q.i >= L.quiz.length - 1;
+      const last = Q.i >= list.length - 1;
       $('#btn-quiz-next').classList.remove('hidden');
       $('#btn-quiz-next').textContent = last ? '過關！' : '下一題 ▶';
     } else {
       S.wrong++;
-      const b = $('#quiz-opts .opt[data-i="' + i + '"]');
-      b.classList.add('bad'); b.disabled = true;
       fb.className = 'quiz-fb bad';
-      fb.innerHTML = '<b>再想一下</b>' + q.tip;
-      fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      fb.innerHTML = '<b>再想一下</b>' + (hint || q.tip || '再看一次動畫或轉一轉場景。');
+      try { fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
     }
   }
 
   function quizNext() {
     const L = cur();
-    if (Q.i < L.quiz.length - 1) { Q.i++; paintQuiz(); return; }
+    if (Q.i < quizList(L).length - 1) { Q.i++; paintQuiz(); return; }
+    QUIZ.teardown();
     enterLesson();
   }
 
@@ -1032,7 +1263,7 @@
     });
     $('#btn-ar-back').addEventListener('click', async () => {
       stopHealthCheck(); clearSuccess(); hideNoCard(); await AR.stop();
-      show('scr-explore'); relayoutExplore(); startTimer(cur());
+      show('scr-explore'); mountHero(); relayoutExplore(); startTimer(cur());
     });
 
     $('#btn-nocard-shot').addEventListener('click', shootNoCard);
@@ -1133,12 +1364,30 @@
 
   /* 測試掛鉤：讓自動化驗證可以驅動流程（不影響一般玩法） */
   window.__game = {
-    state: S, show, cur, startRun, enterAR, showTeach, enterQuiz, answer, quizNext,
+    state: S, show, cur, startRun, enterAR, showTeach, enterQuiz, quizNext,
     enterLesson, nextLevel, enterFinish,
+    // 題目（v1.1 互動題）
+    quizList, kindOf, paintQuiz, onQuizAnswer,
+    quizIndex: () => Q.i,
+    setQuizIndex: k => { Q.i = k; paintQuiz(); return Q.i; },
     // 迷宮
     maze: () => M.maze,
     rect: () => M.rect,
-    pos: () => ({ x: M.px, y: M.py, got: M.got.slice(), ready: M.ready }),
+    pos: () => ({ x: cx(M.from), y: cy(M.from), cell: M.from, dir: M.dir, t: M.t,
+                  vx: M.vx, vy: M.vy, intent: M.intent && M.intent.dir,
+                  got: M.got.slice(), ready: M.ready }),
+    // v1.1 次格步進
+    press, settle, tryTurn, arrive, snapVisual, scheduleSettle,
+    STEP, HOLD, GLIDE, BUFFER,
+    /* 中心吸附誤差：t=0 時角色的畫素座標與該格中心的距離（應為 0） */
+    centerError: () => {
+      if (!M.rect || !M.maze) return null;
+      const c = M.rect.cell;
+      const box = $('#hero3d');
+      const px = parseFloat(box.style.left), py = parseFloat(box.style.top);
+      return Math.hypot(px - (cx(M.from) * c + c / 2), py - (cy(M.from) * c + c / 2));
+    },
+    mountHero, unmountHero,
     step, relayout: relayoutExplore, mazeRect,
     setChar: id => { S.char = D.CHARS.find(c => c.id === id) || D.CHARS[0]; return S.char; },
     gotoLevel: n => { const k = S.queue.indexOf(n); if (k >= 0) { S.idx = k; enterLevel(); } return S.idx; },
@@ -1148,8 +1397,8 @@
       updateTokenHud(); renderMaze(); checkGoal(); return M.got.slice();
     },
     teleport: i => {
-      M.px = i % M.maze.cols; M.py = (i / M.maze.cols) | 0;
-      drawHero(); checkGoal(); return { x: M.px, y: M.py };
+      M.from = i; M.t = 0; M.intent = null;
+      snapVisual(); checkGoal(); return { x: cx(i), y: cy(i) };
     },
     teleportGoal: () => { return window.__game.teleport(M.maze.goal); },
     hitTrap, closeTrap, pickToken, backToStart, startTimer, stopTimer,

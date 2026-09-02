@@ -58,8 +58,137 @@ def fix(txt):
     return str(txt).translate(_SUBSUP)
 
 
-def ctext(d, xy, txt, font, fill, anchor="mm"):
-    d.text(xy, fix(txt), font=font, fill=fill, anchor=anchor)
+# ══════════════════════════════════════════════════════════════
+# 文字量測與自動縮排（v1.1）
+# ── 為什麼要有這一段 ──────────────────────────────────────────
+# v1.0 的字級是寫死的，遇到「④Fe³⁺」這種上標多、字寬不可預測的字串，
+# 就會撐出所屬的圓形／膠囊之外；右下角的 L00 徽章也會和左邊的說明文字重疊。
+# v1.1 起所有文字一律：
+#   ① 先用 PIL.ImageDraw.textbbox 量測，字級逐級縮小直到 bbox 完全落在
+#      所屬形狀區域內（四邊各留 ≥6% 內距）
+#   ② 把每一段文字的 bbox 與所屬區域登記起來
+#   ③ 出圖前程式化斷言：任一文字不超出其區域、任兩個文字 bbox 不相交
+#   ④ 另外輸出一張把 bbox 全部畫出來的檢查圖（tools/_bboxcheck/）
+# ══════════════════════════════════════════════════════════════
+TEXTS = []          # 目前這一張圖已經畫上去的文字紀錄
+
+
+def reset_texts():
+    del TEXTS[:]
+
+
+def _register(name, bbox, region, size, overflow=False):
+    TEXTS.append({"name": name, "bbox": bbox, "region": region,
+                  "size": size, "overflow": overflow})
+
+
+def _inner(region, pad=0.06):
+    """區域內縮 pad（預設 6%），四邊各留白"""
+    x0, y0, x1, y1 = region
+    pw, ph = (x1 - x0) * pad, (y1 - y0) * pad
+    return (x0 + pw, y0 + ph, x1 - pw, y1 - ph)
+
+
+DEFAULT_REGION = (34, 34, S - 34, S - 34)
+
+
+def anchor_point(reg, anchor):
+    """由（已內縮的）區域與 anchor 推出文字的落點，
+       這樣「左對齊的文字起點」一定就在內距之內，不會出現
+       『再怎麼縮小字級也永遠不合格』的死循環。"""
+    x0, y0, x1, y1 = reg
+    ax = anchor[0] if anchor else "m"
+    ay = anchor[1] if len(anchor) > 1 else "m"
+    x = x0 if ax == "l" else (x1 if ax == "r" else (x0 + x1) / 2.0)
+    y = y0 if ay in ("a", "t") else (y1 if ay in ("d", "s", "b") else (y0 + y1) / 2.0)
+    return (x, y)
+
+
+def fit_text(d, xy, txt, size, fill, region=None, anchor="mm", bold=True,
+             min_size=8, pad=None, name=None):
+    """畫文字，並保證 bbox 落在 region 的內縮框裡；放不下就逐級降字級。
+       xy 傳 None 時，落點由 region＋anchor 自動推出（推薦用法）。
+       沒有給 region 時代表「只登記、不設內距」，用整張卡當界線。
+       回傳 (實際字級, bbox)。"""
+    txt = fix(txt)
+    if pad is None:
+        pad = 0.06 if region is not None else 0.0
+    reg = _inner(region or DEFAULT_REGION, pad)
+    if xy is None:
+        xy = anchor_point(reg, anchor)
+    s = int(size)
+    while s >= min_size:
+        f = F(s, bold)
+        b = d.textbbox(xy, txt, font=f, anchor=anchor)
+        if b[0] >= reg[0] - 0.5 and b[1] >= reg[1] - 0.5 and            b[2] <= reg[2] + 0.5 and b[3] <= reg[3] + 0.5:
+            d.text(xy, txt, font=f, fill=fill, anchor=anchor)
+            _register(name or txt[:14], b, reg, s)
+            return s, b
+        s -= 1
+    f = F(min_size, bold)
+    b = d.textbbox(xy, txt, font=f, anchor=anchor)
+    d.text(xy, txt, font=f, fill=fill, anchor=anchor)
+    _register(name or txt[:14], b, reg, min_size, overflow=True)
+    return min_size, b
+
+
+def fit_circle(d, cx, cy, r, lines, size, fill, bold=True, pad=0.06, name=None):
+    """圓形區域內的多行文字：以內接正方形為界，逐行分帶配置，
+       所以同一顆圓裡的兩行永遠不會互相重疊，也不會超出圓周。"""
+    half = r / 1.4142135
+    n = max(1, len(lines))
+    out = []
+    for i, ln in enumerate(lines):
+        y0 = cy - half + (2 * half) * i / n
+        y1 = cy - half + (2 * half) * (i + 1) / n
+        out.append(fit_text(d, (cx, (y0 + y1) / 2), ln, size, fill,
+                            region=(cx - half, y0, cx + half, y1),
+                            bold=bold, pad=pad,
+                            name=(name or "circle") + "#%d" % i))
+    return out
+
+
+def check_texts(tag):
+    """回傳所有違規：溢出所屬區域、或兩段文字 bbox 相交"""
+    bad = []
+    for t in TEXTS:
+        b, r = t["bbox"], t["region"]
+        if t.get("overflow") or b[0] < r[0] - 0.5 or b[1] < r[1] - 0.5 or            b[2] > r[2] + 0.5 or b[3] > r[3] + 0.5:
+            bad.append(("OVERFLOW", tag, t["name"], tuple(int(v) for v in b),
+                        tuple(int(v) for v in r)))
+    for i in range(len(TEXTS)):
+        for j in range(i + 1, len(TEXTS)):
+            a, b = TEXTS[i]["bbox"], TEXTS[j]["bbox"]
+            if a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]:
+                bad.append(("OVERLAP", tag, TEXTS[i]["name"], TEXTS[j]["name"],
+                            tuple(int(v) for v in a), tuple(int(v) for v in b)))
+    return bad
+
+
+def draw_bbox_check(img, tag):
+    """輸出檢查圖：紅框＝文字 bbox、藍框＝所屬區域內縮框"""
+    out = img.copy()
+    dd = ImageDraw.Draw(out)
+    for t in TEXTS:
+        dd.rectangle(list(t["region"]), outline=(60, 120, 255), width=2)
+        dd.rectangle(list(t["bbox"]), outline=(220, 40, 40), width=3)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_bboxcheck")
+    os.makedirs(folder, exist_ok=True)
+    p = os.path.join(folder, tag + ".png")
+    out.save(p)
+    return p
+
+
+def ctext(d, xy, txt, font, fill, anchor="mm", region=None, name=None):
+    """相容 v1.0 的介面：仍然吃 font 物件，但改走 fit_text，
+       所以每一段文字都會被量測與登記，超出範圍時自動縮小。"""
+    try:
+        size = font.size
+    except AttributeError:
+        size = 24
+    bold = getattr(font, "path", "").lower().endswith("bd.ttc")
+    return fit_text(d, xy, txt, size, fill, region=region, anchor=anchor,
+                    bold=bold, name=name)
 
 
 # ────────────────────────────────────────────── 邊框（特徵密集）
@@ -117,21 +246,35 @@ def speckle(d, rng, box, density=170):
 
 
 def header(d, n, title, en, hypo=False):
+    """標題列：假說徽章存在時，標題文字的區域右界自動退讓，兩者不可能重疊。"""
     d.rounded_rectangle([70, 78, S - 70, 214], 22, fill=NAVY)
     d.ellipse([94, 100, 186, 192], fill=GOLD)
-    ctext(d, (140, 146), "%02d" % n, F(52), NAVY)
-    ctext(d, (210, 118), en, F(24, False), MOSS, "lm")
-    ctext(d, (210, 170), title, F(38), WHITE, "lm")
+    fit_text(d, None, "%02d" % n, 52, NAVY,
+             region=(94, 100, 186, 192), name="lv-no")
+    right = (S - 380) if hypo else (S - 100)
+    fit_text(d, None, en, 24, MOSS, region=(204, 96, right, 142),
+             anchor="lm", bold=False, name="lv-en")
+    fit_text(d, None, title, 38, WHITE, region=(204, 146, S - 100, 206),
+             anchor="lm", name="lv-title")
     if hypo:
         d.rounded_rectangle([S - 366, 96, S - 92, 148], 16, fill=GOLD)
-        ctext(d, (S - 229, 122), "研究假說（待驗證）", F(26), NAVY)
+        fit_text(d, None, "研究假說（待驗證）", 26, NAVY,
+                 region=(S - 366, 96, S - 92, 148), name="lv-hypo")
 
 
 def footer(d, n, note):
-    d.rounded_rectangle([70, S - 196, S - 70, S - 78], 20, fill=(233, 241, 244), outline=TEAL, width=3)
-    ctext(d, (96, S - 158), "掃描說明", F(24), TEAL, "lm")
-    ctext(d, (96, S - 116), note, F(25, False), DARK, "lm")
-    ctext(d, (S - 96, S - 137), "L%02d" % n, F(46), TEAL, "rm")
+    """底部列：LNN 徽章獨立成區，說明文字的區域寬度扣掉徽章區。"""
+    d.rounded_rectangle([70, S - 196, S - 70, S - 78], 20, fill=(233, 241, 244),
+                        outline=TEAL, width=3)
+    BADGE = (S - 240, S - 186, S - 88, S - 88)
+    TXT_R = (88, S - 190, S - 256, S - 84)
+    fit_text(d, None, "掃描說明", 24, TEAL,
+             region=(TXT_R[0], S - 190, TXT_R[2], S - 138), anchor="lm", name="ft-label")
+    fit_text(d, None, note, 25, DARK,
+             region=(TXT_R[0], S - 136, TXT_R[2], S - 86), anchor="lm", bold=False,
+             name="ft-note")
+    fit_text(d, None, "L%02d" % n, 46, TEAL, region=BADGE, anchor="rm",
+             name="ft-badge")
 
 
 def card(d, box, r=18, fill=WHITE, outline=GREY):
@@ -251,14 +394,17 @@ def art03(d, rng):   # TPGS-750-M 三段
     for i in range(5):
         pts.append((385 + i * 25, 400 if i % 2 == 0 else 452))
     d.line(pts, fill=GOLD, width=8)
-    ctext(d, (300, 522), "維生素 E（親油頭）", F(30), DARK)
+    fit_text(d, None, "維生素 E（親油頭）", 30, DARK,
+             region=(140, 494, 460, 552), name="seg1")
     # 段二
     d.rounded_rectangle([490, 300, 720, 560], 18, fill=(223, 240, 230), outline=GREEN, width=5)
     d.line([(524, 430), (556, 396), (588, 430), (620, 396), (652, 430)], fill=GREEN, width=9)
     atom(d, 524, 430, 20, RED, "", 0)
     atom(d, 652, 430, 20, RED, "", 0)
-    ctext(d, (605, 352), "HOOC–CH₂CH₂–COOH", F(26), GREEN)
-    ctext(d, (605, 522), "琥珀酸（兩個酯鍵）", F(30), DARK)
+    fit_text(d, None, "HOOC–CH₂CH₂–COOH", 26, GREEN,
+             region=(490, 324, 720, 382), name="seg2-eq")
+    fit_text(d, None, "琥珀酸（兩個酯鍵）", 30, DARK,
+             region=(490, 494, 720, 552), name="seg2")
     # 段三
     d.rounded_rectangle([750, 300, S - 140, 560], 18, fill=(220, 235, 244), outline=DEEP, width=5)
     for i in range(4):
@@ -266,8 +412,10 @@ def art03(d, rng):   # TPGS-750-M 三段
         d.arc([x - 24, 400, x + 24, 460], 180, 360, fill=DEEP, width=8)
         d.arc([x + 10, 400, x + 58, 460], 0, 180, fill=DEEP, width=8)
         atom(d, x, 430, 15, RED, "", 0)
-    ctext(d, (905, 352), "–O–CH₂CH₂– × n（n ≈ 16）", F(26), DEEP)
-    ctext(d, (905, 522), "PEG-750 甲醚（親水尾）", F(30), DARK)
+    fit_text(d, None, "–O–CH₂CH₂– × n（n ≈ 16）", 26, DEEP,
+             region=(750, 324, S - 140, 382), name="seg3-eq")
+    fit_text(d, None, "PEG-750 甲醚（親水尾）", 30, DARK,
+             region=(750, 494, S - 140, 552), name="seg3")
     bond(d, 460, 430, 490, 430, NAVY, 10)
     bond(d, 720, 430, 750, 430, NAVY, 10)
     eqline(d, 726, "α-生育酚 C₂₉H₅₀O₂ —〔琥珀酸 C₄H₆O₄〕— PEG-750 甲醚", 34)
@@ -600,7 +748,8 @@ def uni_frame(d, rng):
             a = math.radians(ci * 15 + k * 60)
             d.line([cx + 28 * math.cos(a), cy + 28 * math.sin(a),
                     cx + 40 * math.cos(a), cy + 40 * math.sin(a)], fill=NAVY, width=4)
-        ctext(d, (cx, cy), "OH", F(18), NAVY)
+        fit_text(d, None, "OH", 18, NAVY,
+                 region=(cx - 18, cy - 18, cx + 18, cy + 18), name="corner-OH%d" % ci)
 
 
 def uni_logo(d, cx, cy, r):
@@ -694,37 +843,74 @@ def art_universal(d, rng):
     sil_aqua(d, 900, 700, 300, DEEP, NAVY)
     for cx, name in ((300, "泡泡 Mimi"), (600, "蛇紋喵"), (900, "水滴 Aqua")):
         d.rounded_rectangle([cx - 108, 716, cx + 108, 768], 14, fill=WHITE, outline=GREEN, width=4)
-        ctext(d, (cx, 742), name, F(30), NAVY)
-    # 八式刻度鏈
-    chain = ["①球磨", "②微胞", "③水解", "④Fe³⁺", "⑤Mg²⁺", "⑥空化", "⑦防治", "⑧檢驗"]
-    for i, txt in enumerate(chain):
-        x = 150 + i * 125
+        fit_text(d, None, name, 30, NAVY,
+                 region=(cx - 108, 716, cx + 108, 768), name="hero-" + name)
+    # 八式刻度鏈：圓徑由 44 加大到 52，文字改成「編號／名稱」兩行，
+    # 並以 fit_circle 逐字級量測，保證「④Fe³⁺」「⑤Mg²⁺」這種寬字串不會撐出圓外。
+    chain = [("①", "球磨"), ("②", "微胞"), ("③", "水解"), ("④", "Fe³⁺"),
+             ("⑤", "Mg²⁺"), ("⑥", "空化"), ("⑦", "防治"), ("⑧", "檢驗")]
+    R = 52
+    CY = 840
+    for i, (num, txt) in enumerate(chain):
+        x = 155 + i * 127
         col = [TEAL, DEEP, GREEN, GOLD, GOLD, TEAL, DEEP, GREEN][i]
-        d.ellipse([x - 44, 806, x + 44, 894], fill=col, outline=NAVY, width=4)
-        ctext(d, (x, 850), txt, F(24), WHITE)
+        d.ellipse([x - R, CY - R, x + R, CY + R], fill=col, outline=NAVY, width=4)
+        fit_circle(d, x, CY, R - 6, [num, txt], 30, WHITE, name="chain%d" % (i + 1))
         if i < 7:
-            d.line([x + 50, 850, x + 74, 850], fill=NAVY, width=6)
+            d.line([x + R + 4, CY, x + 127 - R - 4, CY], fill=NAVY, width=6)
 
 
 def build_universal():
+    """萬用卡：所有文字都有明確的所屬區域，區域彼此不重疊，
+       字級再由 fit_text 逐級量測縮到剛好放得下（含 6% 內距）。"""
+    reset_texts()
     img = Image.new("RGB", (S, S), (247, 251, 248))
     d = ImageDraw.Draw(img)
     rng = random.Random(70012)
     uni_frame(d, rng)
+
+    # ── 標題列 ──────────────────────────────────────────────
     d.rounded_rectangle([76, 84, S - 76, 240], 22, fill=GREEN)
     uni_logo(d, 152, 162, 60)
-    ctext(d, (238, 132), "UNIVERSAL CARD · SCAN ME ANYTIME", F(24, False), (214, 238, 226), "lm")
-    ctext(d, (238, 190), "反應探險　萬用卡", F(44), WHITE, "lm")
+    TITLE_R = (232, 96, S - 336, 232)          # 標題文字區（右界扣掉金色徽章）
+    fit_text(d, None, "UNIVERSAL CARD · SCAN ME ANYTIME", 24, (214, 238, 226),
+             region=(TITLE_R[0], 104, TITLE_R[2], 158), anchor="lm", bold=False,
+             name="eyebrow")
+    fit_text(d, None, "反應探險　萬用卡", 44, WHITE,
+             region=(TITLE_R[0], 162, TITLE_R[2], 226), anchor="lm", name="title")
+    # 金色徽章：兩行各自一個子區域，不會互相碰到
     d.rounded_rectangle([S - 320, 122, S - 100, 206], 18, fill=GOLD)
-    ctext(d, (S - 210, 150), "一張卡", F(28), NAVY)
-    ctext(d, (S - 210, 184), "玩全程", F(28), NAVY)
+    fit_text(d, None, "一張卡", 28, NAVY,
+             region=(S - 320, 122, S - 100, 164), name="badge1")
+    fit_text(d, None, "玩全程", 28, NAVY,
+             region=(S - 320, 164, S - 100, 206), name="badge2")
+
     art_universal(d, rng)
+
+    # ── 底部說明列 ──────────────────────────────────────────
+    # L00 徽章往右獨立成一區，說明文字的區域寬度直接扣掉徽章區，
+    # 兩者在版面上就不可能重疊（不是靠目測，是靠區域切分＋斷言）。
     d.rounded_rectangle([76, 930, S - 76, S - 84], 20, fill=NAVY)
-    ctext(d, (110, 968), "掃描說明", F(24), MOSS, "lm")
-    ctext(d, (110, 1016), "任何一關按「開始掃描」，都可以掃這一張卡。", F(28), WHITE, "lm")
-    ctext(d, (110, 1064), "一張卡就能從第 1 關玩到第 12 關，不必每關換圖。",
-          F(24, False), (198, 220, 232), "lm")
-    ctext(d, (S - 110, 1016), "L00", F(52), GOLD, "rm")
+    BADGE = (S - 268, 952, S - 100, 1094)
+    TEXTB = (104, 944, S - 288, 1102)
+    fit_text(d, None, "掃描說明", 24, MOSS,
+             region=(TEXTB[0], 944, TEXTB[2], 992), anchor="lm", name="foot-label")
+    fit_text(d, None, "任何一關按「開始掃描」，都可以掃這一張卡。", 28, WHITE,
+             region=(TEXTB[0], 996, TEXTB[2], 1048), anchor="lm", name="foot-line1")
+    fit_text(d, None, "一張卡就能從第 1 關玩到第 12 關，不必每關換圖。", 24,
+             (198, 220, 232), region=(TEXTB[0], 1050, TEXTB[2], 1102), anchor="lm",
+             bold=False, name="foot-line2")
+    fit_text(d, None, "L00", 52, GOLD, region=BADGE, anchor="rm", name="foot-L00")
+
+    bad = check_texts("universal")
+    chk = draw_bbox_check(img, "universal")
+    if bad:
+        for b in bad:
+            print("  [!]", b)
+        raise SystemExit("universal.png 文字檢查未通過（見 %s）" % chk)
+    print("  universal.png 文字檢查通過：%d 段文字，無溢出、無重疊；檢查圖 %s"
+          % (len(TEXTS), chk))
+
     p = os.path.join(OUT, "universal.png")
     img.save(p, dpi=(DPI, DPI))
     print("saved", p)
@@ -749,7 +935,9 @@ LEVELS = [
 
 def build():
     build_universal()
+    problems = []
     for n, title, en, fn, hypo, note in LEVELS:
+        reset_texts()
         img = Image.new("RGB", (S, S), BG)
         d = ImageDraw.Draw(img)
         rng = random.Random(2000 + n * 7)
@@ -757,9 +945,24 @@ def build():
         header(d, n, title, en, hypo)
         fn(d, rng)
         footer(d, n, note)
+        tag = "level%02d" % n
+        bad = check_texts(tag)
+        chk = draw_bbox_check(img, tag)
+        if bad:
+            problems.extend(bad)
+            print("  [!] %s 文字檢查：%d 項違規（檢查圖 %s）" % (tag, len(bad), chk))
+            for b in bad[:8]:
+                print("      ", b)
+        else:
+            print("  %s 文字檢查通過：%d 段文字" % (tag, len(TEXTS)))
         p = os.path.join(OUT, "level%02d.png" % n)
         img.save(p, dpi=(DPI, DPI))
         print("saved", p)
+    if problems:
+        print("共 %d 項文字違規待修" % len(problems))
+    else:
+        print("12 張關卡卡 ＋ 萬用卡全部通過文字量測斷言")
+    return problems
 
 
 if __name__ == "__main__":

@@ -7,15 +7,19 @@
 <meta name="description" content="蛇紋石改質反應探險 — 大學生 WebAR 迷宮闖關｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>蛇紋石改質反應探險</title>
-<link rel="stylesheet" href="css/style.css?v=1.0">
+<link rel="stylesheet" href="css/style.css?v=1.1">
 <!-- A-Frame 必須先於 MindAR；全部 defer，順序保留且不阻擋載入畫面繪製 -->
 <script defer src="vendor/aframe.min.js"></script>
 <script defer src="vendor/mindar-image-aframe.prod.js"></script>
-<script defer src="js/data.js?v=1.0"></script>
-<script defer src="js/maze.js?v=1.0"></script>
-<script defer src="js/visuals.js?v=1.0"></script>
-<script defer src="js/ar.js?v=1.0"></script>
-<script defer src="js/game.js?v=1.0"></script>
+<script defer src="js/data.js?v=1.1"></script>
+<script defer src="js/quizdata.js?v=1.1"></script>
+<script defer src="js/anims.js?v=1.1"></script>
+<script defer src="js/maze.js?v=1.1"></script>
+<script defer src="js/visuals.js?v=1.1"></script>
+<script defer src="js/char3d.js?v=1.1"></script>
+<script defer src="js/quiz.js?v=1.1"></script>
+<script defer src="js/ar.js?v=1.1"></script>
+<script defer src="js/game.js?v=1.1"></script>
 </head>
 <body>
 
@@ -33,7 +37,7 @@
     <p class="load-sub">SERPENTINE REACTION QUEST</p>
     <p id="load-msg" class="load-msg">正在準備素材…</p>
   </div>
-  <span class="ver-tag">v1.0</span>
+  <span class="ver-tag">v1.1</span>
 </section>
 
 <!-- ═══════════ 標題頁 ═══════════ -->
@@ -55,7 +59,7 @@
     <button id="btn-howto" class="btn ghost">怎麼玩？</button>
     <a class="btn ghost" href="cards.html">卡片輪播（第二台裝置顯示卡片）</a>
   </div>
-  <span class="ver-tag">v1.0</span>
+  <span class="ver-tag">v1.1</span>
 </section>
 
 <!-- ═══════════ 玩法說明 ═══════════ -->
@@ -64,17 +68,22 @@
     <p class="kicker">HOW TO PLAY</p>
     <h2 class="page-title">怎麼玩</h2>
     <ol class="howto">
-      <li><b>選主角</b>：泡泡 Mimi、蛇紋喵、水滴 Aqua，三選一。</li>
+      <li><b>選主角</b>：泡泡 Mimi、蛇紋喵、水滴 Aqua，三選一——每一位都是可以自轉的 <b>3D 角色</b>，
+        走迷宮時會面向行進方向、有走路的起伏動作。</li>
       <li><b>選路線</b>：6 關精華（1、3、5、8、9、12）或 12 關完整版。</li>
-      <li><b>走迷宮</b>：方向鍵<b>一次走一格</b>，牆壁不能穿越。迷宮由固定亂數種子生成，
+      <li><b>走迷宮</b>：方向鍵<b>點一下走三分之一格</b>（按住就連續慢走），牆壁不能穿越。
+        在路口前先按下一個方向，走到路口就會<b>自動轉彎並對齊格子中心</b>，不會卡在轉角。
+        迷宮由固定亂數種子生成，
         同一關永遠是同一張圖，可以練到熟。</li>
       <li><b>先蒐集 3 個代幣</b>：每關有三個「試劑／條件」代幣藏在死路裡（例如第 8 關要蒐集
         Fe³⁺、–OH、H₂O）。<b>集滿 3/3，終點才會開啟</b>。</li>
       <li><b>小心陷阱格</b>：踩到「高溫爐」「有機溶劑」等違反綠色化學的格子會<b>退回起點</b>，
         並跳出一句原則說明——懲罰本身就是教材。</li>
       <li><b>限時挑戰</b>：第 5、8、11 關預設限時，可在關卡選單關閉。</li>
-      <li><b>掃描與答題</b>：走到終點按「開始掃描」，掃到卡片後 3D 反應式會浮現，
-        接著看教學面板，再回答<b>兩題</b>大學程度問答；答錯會給提示可重試。</li>
+      <li><b>掃描與答題</b>：走到終點按「開始掃描」，掃到卡片後 3D 反應式會浮現，接著看教學面板，
+        再作答<b>兩題互動題</b>——一題是 <b>AR 互動題</b>（直接點選或拖曳 3D 物件），
+        一題是 <b>動畫影片題</b>（先看 6–10 秒反應動畫，再點出關鍵時刻或把步驟卡排序）。
+        答錯會給提示，可以重試。</li>
       <li><b>全破總結</b>：列出八式完整反應鏈，並明確標出<b>哪些已證、哪些是研究假說</b>。</li>
     </ol>
     <div class="note">
@@ -136,6 +145,7 @@
       <svg id="maze-svg" class="maze-svg" xmlns="http://www.w3.org/2000/svg"></svg>
       <div id="maze-items" class="maze-items"></div>
       <div id="goal" class="goal"><span class="goal-ring"></span><span class="goal-dot">?</span></div>
+      <div id="hero3d" class="hero3d"></div>
       <img id="hero" class="hero" alt="主角">
     </div>
   </div>
@@ -309,8 +319,10 @@
   <div class="pad">
     <p class="kicker">闖關問答 · <span id="quiz-level"></span></p>
     <p id="quiz-step" class="quiz-step"></p>
+    <p id="quiz-kind" class="quiz-kind"></p>
+    <p id="quiz-hypo" class="hypo-tag hidden">研究假說（待驗證）</p>
     <h2 id="quiz-q" class="quiz-q"></h2>
-    <div id="quiz-opts" class="quiz-opts"></div>
+    <div id="quiz-stage" class="quiz-stage"></div>
     <div id="quiz-fb" class="quiz-fb hidden"></div>
     <button id="btn-quiz-next" class="btn primary big hidden">繼續</button>
   </div>

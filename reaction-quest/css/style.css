@@ -538,3 +538,108 @@ a.btn{text-decoration:none;text-align:center;line-height:1.35;
 @media (max-height:520px) and (orientation:landscape){
   .token-pop{bottom:calc(150px + var(--safe-b))}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   v1.1 追加樣式：3D 主角、選角 3D 預覽、互動題（AR 題／動畫題／排序題）
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 迷宮 3D 主角 ──
+   a-scene 容器錨定在格中心：左右置中，垂直方向讓「腳底」落在格中心
+   （鏡頭 y=0.52、fov 46、距離 2.15 → 世界 y=0 約在容器高度的 78.3%）。 */
+.hero3d{position:absolute;width:60px;height:60px;transform:translate(-50%,-81.8%);
+  z-index:4;pointer-events:none;transition:none}
+.hero3d.off{display:none}
+.hero3d a-scene,.hero3d .a-canvas{width:100% !important;height:100% !important;
+  position:absolute !important;inset:0 !important;background:transparent !important}
+.hero3d .a-enter-vr,.hero3d .a-enter-ar,.hero3d .a-loader-title{display:none !important}
+.hero3d.bump{animation:bump .18s ease-out}
+#scr-explore .hero.off{display:none}
+
+/* ── 選角 3D 預覽 ── */
+.char-3d{position:relative;width:86px;height:110px;flex:0 0 86px;border-radius:14px;
+  background:linear-gradient(180deg,#EAF3F6,#D8E8EE);overflow:hidden}
+.char-3d a-scene,.char-3d .a-canvas{width:100% !important;height:100% !important;
+  position:absolute !important;inset:0 !important;background:transparent !important}
+.char-3d .a-enter-vr,.char-3d .a-enter-ar,.char-3d .a-loader-title{display:none !important}
+.char-3d img{width:100%;height:100%;object-fit:contain}
+
+/* ── 互動題共用 ── */
+.quiz-kind{margin:0 0 8px;font-size:12.5px;font-weight:800;color:var(--gold);letter-spacing:.04em}
+.quiz-stage{position:relative;margin:0 0 16px}
+
+/* AR 互動題：3D 場景 ＋ 疊在上面的可點熱區 */
+.q3d-wrap{position:relative;width:100%;aspect-ratio:16/11;border-radius:16px;overflow:hidden;
+  background:radial-gradient(circle at 50% 38%,#16385A 0%,#0B1F3A 72%);
+  border:3px solid #16456B;touch-action:none}
+.q3d-host{position:absolute;inset:0}
+.q3d-host a-scene,.q3d-host .a-canvas{width:100% !important;height:100% !important;
+  position:absolute !important;inset:0 !important;background:transparent !important}
+.q3d-host .a-enter-vr,.q3d-host .a-enter-ar,.q3d-host .a-loader-title{display:none !important}
+.q3d-zones{position:absolute;inset:0}
+.q3d-zone{position:absolute;transform:translate(-50%,0);min-height:26px;padding:4px 9px;
+  border-radius:999px;border:2px solid rgba(255,255,255,.6);background:rgba(11,31,58,.78);
+  color:#fff;font:700 11.5px/1.3 inherit;white-space:nowrap;cursor:pointer;
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);transition:transform .12s}
+.q3d-zone:active{transform:translate(-50%,0) scale(.94)}
+.q3d-zone.drop{border-style:dashed;pointer-events:none}
+.q3d-zone.over{background:rgba(46,125,91,.85);border-color:#9FD3C0}
+.q3d-zone.ok{background:rgba(46,125,91,.92);border-color:#fff}
+.q3d-zone.bad{animation:qshake .34s ease-out}
+@keyframes qshake{0%,100%{transform:translate(-50%,0)}
+  25%{transform:translate(calc(-50% - 7px),0)}75%{transform:translate(calc(-50% + 7px),0)}}
+.q3d-chip{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+  padding:9px 16px;border-radius:999px;background:var(--gold);color:#2A1F06;
+  font:800 14px/1 inherit;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:grab;
+  touch-action:none;user-select:none;z-index:6}
+.q3d-chip.drag{cursor:grabbing;box-shadow:0 8px 22px rgba(0,0,0,.5);z-index:9}
+.q3d-cue{margin:9px 2px 0;font-size:12.5px;line-height:1.7;color:var(--grey)}
+.q3d-wrap .q3d-cue{position:absolute;left:0;right:0;top:6px;margin:0;text-align:center;
+  color:#BFD8E6;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6);pointer-events:none}
+
+/* 動畫影片題 */
+.qanim{position:relative}
+.qanim-cv{display:block;width:100%;height:auto;border-radius:16px;border:3px solid #CBD9DF;
+  background:#F1F6F8}
+.qanim-regions{position:absolute;left:0;right:0;top:0;aspect-ratio:340/190}
+.qanim-region{position:absolute;border:2.5px dashed rgba(11,31,58,.42);border-radius:12px;
+  background:rgba(255,255,255,.06);cursor:pointer;display:flex;align-items:flex-start;
+  justify-content:center;padding-top:4px}
+.qanim-region span{background:rgba(11,31,58,.78);color:#fff;font:800 11.5px/1 inherit;
+  padding:4px 9px;border-radius:999px}
+.qanim-region.ok{border-color:var(--green);background:rgba(46,125,91,.20)}
+.qanim-region.ok span{background:var(--green)}
+.qanim-region.bad{animation:rshake .34s ease-out;border-color:#C0553F}
+@keyframes rshake{0%,100%{margin-left:0}25%{margin-left:-7px}75%{margin-left:7px}}
+.qanim-bar{display:flex;align-items:center;gap:9px;margin-top:9px}
+.qanim-bar button{flex:0 0 auto;min-height:36px;padding:7px 11px;border:2px solid var(--teal);
+  background:#fff;color:var(--teal);border-radius:10px;font:800 12.5px/1 inherit;cursor:pointer}
+.qanim-time{flex:0 0 46px;font:800 12px/1 inherit;color:var(--grey);text-align:right}
+.qanim-track{position:relative;flex:1;height:26px;border-radius:8px;background:#E3ECF0;
+  cursor:pointer;touch-action:none;overflow:hidden}
+.qanim-fill{position:absolute;left:0;top:0;bottom:0;background:#BFD8E6}
+.qanim-head{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:var(--navy)}
+.qanim-head.ok{background:var(--green);width:6px;margin-left:-3px}
+.qanim-head.bad{animation:hshake .34s ease-out;background:#C0553F}
+@keyframes hshake{0%,100%{opacity:1}25%,75%{opacity:.25}}
+.qanim-key{position:absolute;top:0;bottom:0;width:3px;margin-left:-1.5px;background:var(--gold)}
+.qanim-marks{position:absolute;inset:0;pointer-events:none}
+.qanim-marks i{position:absolute;top:60%;bottom:2px;width:1px;background:rgba(11,31,58,.22)}
+
+/* 排序題 */
+.qorder-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.qcard{display:flex;align-items:center;gap:11px;background:var(--card);border:3px solid #DCE5E8;
+  border-radius:14px;padding:11px 12px;touch-action:none;user-select:none;cursor:grab}
+.qcard.lift{border-color:var(--teal);box-shadow:0 8px 20px rgba(28,114,147,.28);cursor:grabbing}
+.qcard.ok{border-color:var(--green);background:#EAF6EF}
+.qcard.bad{animation:rshake .34s ease-out;border-color:#C0553F;background:#FBEDEA}
+.qcard-n{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;
+  font:800 14px/28px inherit;text-align:center}
+.qcard-b{flex:1;display:flex;flex-direction:column;gap:2px;text-align:left}
+.qcard-b b{font-size:14.5px;color:var(--navy)}
+.qcard-b i{font-style:normal;font-size:12px;color:var(--grey);line-height:1.6}
+.qcard-grip{flex:0 0 auto;color:#A8BAC2;font-size:19px}
+
+@media (max-width:360px){
+  .char-3d{width:74px;height:96px;flex:0 0 74px}
+  .q3d-zone{font-size:11px;padding:4px 8px}
+}
