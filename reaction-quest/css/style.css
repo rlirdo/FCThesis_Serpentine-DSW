@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 v2.1 — 全程懸浮式 AR
+/* 蛇紋石改質反應探險 v2.1.1 — 全程懸浮式 AR
    層次（由下而上）：
      0  相機實景（<video>／無相機時的場景 SVG）
      1  A-Frame 懸浮舞台（透明畫布，主角／代幣／看板／題目都在這裡）
@@ -111,30 +111,41 @@ body.nocam .scene-bg{display:block}
 .big-title{font-size:38px;line-height:1.2;font-weight:800;margin:0 0 8px}
 .sub-en{font-style:italic;color:#9FBCCB;font-size:13.5px;margin:0 0 18px}
 .pick-h{color:var(--moss);font-weight:800;font-size:13px;margin:16px 0 8px;letter-spacing:.5px}
-/* ── 選角／選路線卡（v2.1：選取態必須一眼分辨） ──
+/* ── 選角／選路線卡（v2.1.1：選取態完全由 CSS 驅動） ──
    未選取：淺色白卡、opacity .85；選取：主角主色實底＋3px 金框＋1.04 放大＋✓ 標籤。
    三張卡固定 16px 間距（選取態 1.04 放大會吃掉約 2px，實測仍 ≥12px），
-   各自獨立容器，矩形零相交。 */
+   各自獨立容器，矩形零相交。
+
+   ── 兩個刻意的設計決定 ──────────────────────────────────────
+   ① 主色以 CSS 變數 --sel（選取底色）與 --accent（未選取邊框）掛在每張卡上，
+      切換時 JS 只加減 .on，完全不寫 inline style
+      —— v2.1 用 JS 逐張塗 inline style，多一份「舊選取者要記得清掉」的狀態要維護。
+   ② 帶有「身分」意義的四個屬性（背景、邊框色、放大、不透明度）**不做過渡**，
+      點下去的同一幀就是最終值。150 ms 的視覺過渡放在金色外光暈（box-shadow）上。
+      這樣任何自動化驗收（或無障礙工具）讀 getComputedStyle 都會拿到最終狀態，
+      不會讀到過渡中的中間值——在動畫時鐘被凍結的環境裡（背景分頁、螢幕截圖服務、
+      prefers-reduced-motion）中間值甚至會永遠停在「舊的那一個」。 */
 .pick-row{display:flex;gap:16px;flex-wrap:wrap}
 .pick-card{flex:1 1 30%;min-width:96px;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.22);
   border-radius:14px;padding:12px 8px;color:#fff;display:flex;flex-direction:column;gap:3px;
   align-items:center;cursor:pointer;position:relative;
-  transition:background-color .15s ease,border-color .15s ease,transform .15s ease,
-             opacity .15s ease,box-shadow .15s ease,color .15s ease}
+  transition:box-shadow .15s ease}
 .pick-card.on{background:rgba(95,169,138,.22);border-color:var(--moss);box-shadow:0 0 0 2px rgba(95,169,138,.35)}
 /* 主角卡：未選取＝淺色白卡（降透明度），選取＝實色主色＋金框＋放大 */
-.pick-card.char{background:#F5F9FA;border:2px solid #cfdbe2;color:var(--navy);opacity:.85}
+.pick-card.char{background:#F5F9FA;border:2px solid var(--accent,#cfdbe2);color:var(--navy);opacity:.85;
+  transform:none}
 .pick-card.char .pick-d{color:#4a6373}
-.pick-card.char.on{opacity:1;color:#fff;border-width:3px;border-color:var(--gold);
-  transform:scale(1.04);box-shadow:0 0 0 3px rgba(201,154,62,.30),0 10px 22px rgba(0,0,0,.42)}
+.pick-card.char.on{background:var(--sel,#065A82);border:3px solid var(--gold);
+  color:#fff;opacity:1;transform:scale(1.04);
+  box-shadow:0 0 0 3px rgba(201,154,62,.30),0 10px 22px rgba(0,0,0,.42)}
 .pick-card.char.on .pick-d{color:#E7F1F5}
 .pick-ok{display:none;font-size:11.5px;font-weight:800;letter-spacing:.5px;
   color:var(--gold);background:rgba(11,31,58,.55);border-radius:9px;padding:2px 8px;margin-top:3px}
 .pick-card.char.on .pick-ok{display:block}
 /* 路線卡沿用同一套選取語彙（金框＋放大），底色改用深海藍 */
-.pick-card[data-mode]{opacity:.85}
-.pick-card[data-mode].on{opacity:1;background:rgba(6,90,130,.92);border-width:3px;
-  border-color:var(--gold);transform:scale(1.04);
+.pick-card[data-mode]{opacity:.85;transform:none}
+.pick-card[data-mode].on{opacity:1;background:rgba(6,90,130,.92);border:3px solid var(--gold);
+  transform:scale(1.04);
   box-shadow:0 0 0 3px rgba(201,154,62,.30),0 10px 22px rgba(0,0,0,.42)}
 .pick-n{font-size:26px;font-weight:800;color:var(--gold);line-height:1}
 .pick-t{font-size:15px;font-weight:800}

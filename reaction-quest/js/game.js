@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 — 流程控制 v2.1（全程懸浮式 AR）
+/* 蛇紋石改質反應探險 — 流程控制 v2.1.1（全程懸浮式 AR）
    ══════════════════════════════════════════════════════════════════
    與 v1.1 的差別，一句話：**沒有任何一頁 2D 文字了**。
    從按下「開始冒險」的那一刻起，背景永遠是相機實景，
@@ -13,7 +13,7 @@
    全破 → 八式反應鏈環繞主角旋轉（已證／假說分色）＋ 完成徽章截圖 */
 (function () {
 
-  var V = '2.1';
+  var V = '2.1.1';
   var BASIC = [1, 3, 5, 8, 12];
   var ADV = [1, 3, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -49,15 +49,15 @@
   }
 
   /* ══════════ 標題頁 ══════════ */
-  /* v2.1：選取態要「一眼看得出來」——實色主角主色底 ＋ 3px 金框 ＋ 1.04 放大 ＋ ✓ 標籤。
-     未選取者維持淺色白卡並降到 opacity .85，兩者相對亮度對比 ≥ 3:1。 */
+  /* v2.1.1：選取態全部交給 CSS。
+     每張卡在建立時把主色寫進 CSS 變數（--sel 選取底色、--accent 未選取邊框），
+     之後切換只加減 .on —— 不再有任何 inline style 需要在切換時清乾淨。
+     v2.1 是 JS 逐張塗 inline style，多維護一份「舊選取者要記得還原」的狀態；
+     現在那份狀態不存在了，選取態在點擊的同一幀就成立。 */
   var SEL_COLOR = { mimi: '#065A82', serpy: '#2E7D5B', aqua: '#1C7293' };
-  function paintCharCards() {
+  function markChosen() {
     $$('#char-row .pick-card').forEach(function (x) {
-      var on = x.classList.contains('on');
-      x.style.background = on ? (SEL_COLOR[x.dataset.char] || '#065A82') : '';
-      x.style.borderColor = on ? '#C99A3E' : (x.dataset.accent || '');
-      x.setAttribute('aria-pressed', on ? 'true' : 'false');
+      x.setAttribute('aria-pressed', x.classList.contains('on') ? 'true' : 'false');
     });
   }
   function buildTitle() {
@@ -67,20 +67,22 @@
       var b = document.createElement('button');
       b.className = 'pick-card char' + (c.id === S.charId ? ' on' : '');
       b.dataset.char = c.id;
-      b.dataset.accent = c.color;
+      b.type = 'button';
+      b.style.setProperty('--sel', SEL_COLOR[c.id] || '#065A82');
+      b.style.setProperty('--accent', c.color);
       b.innerHTML = '<span class="pick-t">' + c.name + '</span>' +
                     '<span class="pick-d">' + c.trait + '</span>' +
                     '<span class="pick-ok">✓ 已選擇</span>';
       row.appendChild(b);
     });
-    paintCharCards();
+    markChosen();
     row.addEventListener('click', function (e) {
       var b = e.target.closest('[data-char]');
       if (!b) return;
       S.charId = b.dataset.char;
       $$('#char-row .pick-card').forEach(function (x) { x.classList.remove('on'); });
       b.classList.add('on');
-      paintCharCards();
+      markChosen();
     });
     $$('.pick-card[data-mode]').forEach(function (b) {
       if (parseInt(b.dataset.mode, 10) === S.route) b.classList.add('on');

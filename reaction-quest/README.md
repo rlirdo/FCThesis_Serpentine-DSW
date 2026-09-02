@@ -1,4 +1,4 @@
-# 蛇紋石改質反應探險（Serpentine Reaction Quest）v2.1
+# 蛇紋石改質反應探險（Serpentine Reaction Quest）v2.1.1
 
 大學程度的手機 **WebAR 全像闖關**教學遊戲。內容取自《從零基礎到論文實驗：化學整合教學簡報》
 第 24–50 頁（第三階「認識論文的主角」、第四階「看懂論文的反應式」），
@@ -22,6 +22,28 @@
 | 2 | 離開遊戲後手機還在放音樂 | `stopBgm()` 現在會**清排程 interval、對每一顆已排入未來的振盪器呼叫 `osc.stop(now)` 並 disconnect**；`visibilitychange(hidden)`／`pagehide`／`beforeunload`／`blur`／`freeze` 一律 `panic()`＝停 BGM ＋ `ctx.suspend()`；回到前景不自動續播，等使用者手勢或進入下一階段。過關 jingle 播完一輪自動停，全破 2.6 秒後淡出 |
 | 3 | 主角在手機上太小，且主角／代幣／關鍵物件／看板互相蓋住 | `HERO_SCALE` 0.30 → **0.50（×1.667）**，投影高度由 13% 上升到 **18.9–21.9%**；新增 `relayout()`：把每個元件的世界包圍盒投影成 2D 螢幕矩形做碰撞檢查，看板與關鍵物件用一維／二維全域掃描找乾淨位置，代幣用「半徑 × 高度 × 環繞角度」爬山搜尋外推，直到零相交。教學階段主角會平滑走到卡片前緣，把上半部讓給關鍵物件與看板 |
 | 4 | 首頁選角看不出選了誰 | 選取態＝**主角主色實底 ＋ 3px 金框 ＋ 1.04 放大 ＋「✓ 已選擇」標籤**；未選取＝淺色白卡、`opacity .85`。相對亮度對比由 **2.79:1 提升到 5.23:1**（純色相比 7.10:1），三卡間距 14–16 px、矩形零相交 |
+
+### v2.1.1：選角卡改為純 CSS 驅動（2026/09/03）
+
+v2.1 的選角卡把主色寫成 inline style，切換時要靠 JS 記得還原舊選取者；
+而且四個「身分屬性」（背景、邊框色、放大、不透明度）都掛在 150 ms 的 CSS transition 上。
+在**動畫時鐘被凍結**的環境（背景分頁、螢幕截圖服務）裡，
+`document.timeline.currentTime` 停在 0、transition 永遠 `running` 且 `currentTime = 0`，
+於是 `getComputedStyle` 會一直回傳「過渡前」的值——看起來就像選取態沒有跟著移動
+（實際上 inline style 有正確更新，只是讀不到）。
+
+v2.1.1 的作法：
+
+- 主色改用 CSS 變數 `--sel`（選取底色）與 `--accent`（未選取邊框），在建卡時各設一次；
+  切換時 JS **只加減 `.on`**，不再寫任何 inline style，也就沒有「要記得還原」這件事
+- 身分屬性一律**不做過渡**，點下去的同一幀就是最終值；150 ms 的視覺過渡保留在金色外光暈（`box-shadow`）
+- 未選取態明確寫 `transform:none`，避免留下 `matrix(1,0,0,1,0,0)` 之類的殘值
+
+驗收（`tools/rq4_pick.js`，真 `pointerdown`／`pointerup`／`click`，點完立刻讀 `getComputedStyle`，
+不做任何停用過渡的處理）：初始 ＋ 點 card1 → card2 → card0 共四次快照，
+「選取者＝主色底＋3px 金框＋scale(1.04)＋opacity 1＋標籤可見、
+其餘＝白底＋2px 主角色邊框＋opacity .85＋`transform:none`＋標籤隱藏、
+三張卡皆無殘留 inline style、選取張數恆為 1」**四次全對**。
 
 ### v2.1 本機驗證數據
 
