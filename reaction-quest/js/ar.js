@@ -1,4 +1,14 @@
-/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.3
+/* AR 掃描模組（MindAR image tracking ＋ A-Frame）v1.3 ＋ v2.0 沿用
+   ── v2.0 的用法改變（本檔的相機邏輯一行未改） ────────────────────
+   v2.0 把「整關持續追蹤 ＋ 內容錨定在卡片上」交給 js/stage.js，
+   本檔只保留並繼續使用四項久經實機驗證的資產：
+     ① acquireCamera()／attachPreview()：使用者手勢內取得單一 MediaStream
+     ② escapeInAppBrowser()：LINE 內建瀏覽器自動改用外部瀏覽器開啟
+     ③ probe()／brightnessOf()：串流健康檢查（含全黑畫面偵測）
+     ④ diagText()：一鍵複製的相機診斷面板
+   VERSION 由 1.1 提升為 2.0，只影響 .mind 的快取參數與診斷字串。
+   start()／stop() 仍完整保留，供單次掃描模式或回退使用。
+
    ── v1.3 萬用卡：每一關都是「雙目標」──────────────────────────────
    問題：v1.2 每關只有一個 target，玩家每過一關就得回筆電換一張圖才能掃，
         體驗在關與關之間被硬生生切斷。
@@ -37,7 +47,7 @@
    5. 【內建瀏覽器】LINE 自動導向外部瀏覽器；FB / IG / 微信顯示逃生指引。 */
 window.AR = (function () {
 
-  const VERSION = '1.1';
+  const VERSION = '2.0';   // v2.0：.mind 快取參數與全站版號一致（相機邏輯完全沿用 v1.1）
 
   let host = null, sceneEl = null, running = false, mo = null;
   let onFoundCb = null, onLostCb = null;
