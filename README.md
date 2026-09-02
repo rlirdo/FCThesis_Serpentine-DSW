@@ -10,6 +10,22 @@
 
 ---
 
+## 兩款遊戲
+
+| | 花蓮綠色化學闖關 v1.4 | 蛇紋石改質反應探險 v1.0 |
+|---|---|---|
+| 網址 | [`/`](https://rlirdo.github.io/FCThesis_Serpentine-DSW/) | [`/reaction-quest/`](https://rlirdo.github.io/FCThesis_Serpentine-DSW/reaction-quest/) |
+| 對象 | 國小～高中 | **大學生** |
+| 內容 | 在地資源／循環經濟／綠色化學十二原則（簡報七階全貌） | **五個主角＋八式反應鏈**（簡報 p24–50） |
+| 探索模式 | 自由走動到光點 | **格狀迷宮**：一次走一格、先撿齊 3 個試劑代幣才解鎖終點、陷阱格、限時挑戰 |
+| 問答 | 每關 1 題 | **每關 2 題**（大學程度） |
+| 關卡數 | 5／10 | 6／12 |
+| AR 管線 | MindAR ＋ A-Frame | 同一套（`js/ar.js` 原封沿用，未重寫） |
+
+進階版的完整說明見 [`reaction-quest/README.md`](reaction-quest/README.md)。
+
+---
+
 ## 為什麼是 WebAR，不是 Unity
 
 需求是「**一個網址，Android 與 iPhone 都能用相機掃描**」。

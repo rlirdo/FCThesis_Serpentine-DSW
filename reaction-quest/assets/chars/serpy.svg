@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 132" role="img" aria-label="蛇紋喵">
+  <title>蛇紋喵 — 層狀礦物小貓（本專案自繪）</title>
+  <defs>
+    <linearGradient id="sbody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5FA98A"/><stop offset="1" stop-color="#245C44"/>
+    </linearGradient>
+    <pattern id="serp" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="none"/>
+      <path d="M0 10 q3.5 -6 7 0 q3.5 6 7 0" fill="none" stroke="#1E4A38" stroke-width="1.6" opacity="0.55"/>
+      <path d="M0 4 q3.5 -6 7 0 q3.5 6 7 0" fill="none" stroke="#8CCBAE" stroke-width="1.3" opacity="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- 尾巴 -->
+  <path d="M92 96 q22 -4 20 -24 q-2 -16 -16 -14" fill="none" stroke="#245C44" stroke-width="9" stroke-linecap="round"/>
+  <path d="M92 96 q22 -4 20 -24 q-2 -16 -16 -14" fill="none" stroke="#8CCBAE" stroke-width="3" stroke-linecap="round" stroke-dasharray="5 7"/>
+
+  <!-- 身體 -->
+  <ellipse cx="60" cy="92" rx="32" ry="28" fill="url(#sbody)" stroke="#0B1F3A" stroke-width="3"/>
+  <ellipse cx="60" cy="92" rx="32" ry="28" fill="url(#serp)" stroke="none"/>
+
+  <!-- 前腳 -->
+  <ellipse cx="44" cy="116" rx="10" ry="7" fill="#3B7A5C" stroke="#0B1F3A" stroke-width="2.4"/>
+  <ellipse cx="76" cy="116" rx="10" ry="7" fill="#3B7A5C" stroke="#0B1F3A" stroke-width="2.4"/>
+
+  <!-- –OH 徽章 -->
+  <circle cx="60" cy="92" r="14" fill="#C99A3E" stroke="#0B1F3A" stroke-width="2.6"/>
+  <text x="60" y="97" font-size="12" font-weight="700" text-anchor="middle"
+        fill="#0B1F3A" font-family="Microsoft JhengHei, sans-serif">–OH</text>
+
+  <!-- 耳朵 -->
+  <path d="M32 44 l-6 -24 l22 10 z" fill="#3B7A5C" stroke="#0B1F3A" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M88 44 l6 -24 l-22 10 z" fill="#3B7A5C" stroke="#0B1F3A" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M33 40 l-3 -13 l12 6 z" fill="#F0B6B6"/>
+  <path d="M87 40 l3 -13 l-12 6 z" fill="#F0B6B6"/>
+
+  <!-- 頭 -->
+  <ellipse cx="60" cy="50" rx="32" ry="28" fill="url(#sbody)" stroke="#0B1F3A" stroke-width="3"/>
+  <ellipse cx="60" cy="50" rx="32" ry="28" fill="url(#serp)" stroke="none"/>
+
+  <!-- 臉 -->
+  <ellipse cx="48" cy="47" rx="6" ry="7.4" fill="#0B1F3A"/>
+  <ellipse cx="72" cy="47" rx="6" ry="7.4" fill="#0B1F3A"/>
+  <circle cx="50" cy="44.2" r="2.2" fill="#fff"/><circle cx="74" cy="44.2" r="2.2" fill="#fff"/>
+  <path d="M56 60 l4 4 l4 -4 z" fill="#F0B6B6" stroke="#0B1F3A" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M52 68 q8 6 16 0" fill="none" stroke="#0B1F3A" stroke-width="2.6" stroke-linecap="round"/>
+  <g stroke="#0B1F3A" stroke-width="2" stroke-linecap="round" opacity="0.8">
+    <path d="M28 56 l-14 -4"/><path d="M28 62 l-14 2"/>
+    <path d="M92 56 l14 -4"/><path d="M92 62 l14 2"/>
+  </g>
+  <ellipse cx="36" cy="60" rx="6" ry="4" fill="#F19A9A" opacity="0.55"/>
+  <ellipse cx="84" cy="60" rx="6" ry="4" fill="#F19A9A" opacity="0.55"/>
+</svg>

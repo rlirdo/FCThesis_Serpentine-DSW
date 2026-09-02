@@ -4,17 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0B1F3A">
-<meta name="description" content="花蓮綠色化學闖關 — 手機 WebAR 教學遊戲｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
+<meta name="description" content="蛇紋石改質反應探險 — 大學生 WebAR 迷宮闖關｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>花蓮綠色化學闖關</title>
-<link rel="stylesheet" href="css/style.css?v=1.4">
+<title>蛇紋石改質反應探險</title>
+<link rel="stylesheet" href="css/style.css?v=1.0">
 <!-- A-Frame 必須先於 MindAR；全部 defer，順序保留且不阻擋載入畫面繪製 -->
 <script defer src="vendor/aframe.min.js"></script>
 <script defer src="vendor/mindar-image-aframe.prod.js"></script>
-<script defer src="js/data.js?v=1.4"></script>
-<script defer src="js/visuals.js?v=1.4"></script>
-<script defer src="js/ar.js?v=1.4"></script>
-<script defer src="js/game.js?v=1.4"></script>
+<script defer src="js/data.js?v=1.0"></script>
+<script defer src="js/maze.js?v=1.0"></script>
+<script defer src="js/visuals.js?v=1.0"></script>
+<script defer src="js/ar.js?v=1.0"></script>
+<script defer src="js/game.js?v=1.0"></script>
 </head>
 <body>
 
@@ -28,34 +29,33 @@
 <section id="scr-loading" class="screen dark active">
   <div class="loader-wrap">
     <div class="spinner"></div>
-    <h1 class="load-title">花蓮綠色化學闖關</h1>
-    <p class="load-sub">HUALIEN GREEN CHEMISTRY QUEST</p>
+    <h1 class="load-title">蛇紋石改質反應探險</h1>
+    <p class="load-sub">SERPENTINE REACTION QUEST</p>
     <p id="load-msg" class="load-msg">正在準備素材…</p>
   </div>
-  <span class="ver-tag">v1.4</span>
+  <span class="ver-tag">v1.0</span>
 </section>
 
 <!-- ═══════════ 標題頁 ═══════════ -->
 <section id="scr-title" class="screen dark">
   <div class="deco-circle c1"></div><div class="deco-circle c2"></div>
   <div class="pad">
-    <p class="eyebrow">仿生與環境工作坊 ・ 環境教育 WebAR</p>
-    <h1 class="big-title">花蓮綠色化學<br>闖關遊戲</h1>
-    <p class="sub-en">Hualien Green Chemistry Quest — A WebAR Learning Journey</p>
+    <p class="eyebrow">仿生與環境工作坊 ・ 大學程度 WebAR 迷宮闖關</p>
+    <h1 class="big-title">蛇紋石改質<br>反應探險</h1>
+    <p class="sub-en">Serpentine Reaction Quest — Micellar Modification in Water, Step by Step</p>
     <div class="pills">
-      <span class="pill teal">在地資源</span>
-      <span class="pill green">循環經濟</span>
-      <span class="pill gold">綠色化學</span>
-      <span class="pill deep">環境永續</span>
+      <span class="pill teal">層狀矽酸鹽</span>
+      <span class="pill green">微胞水相</span>
+      <span class="pill gold">八式反應鏈</span>
+      <span class="pill deep">研究假說</span>
     </div>
     <hr class="rule">
     <p class="byline">國立東華大學自然資源與環境學系<br>指導教授：楊悠娟 教授　｜　製作：游豐兆 博士生</p>
-    <button id="btn-start" class="btn primary big">開始冒險</button>
+    <button id="btn-start" class="btn primary big">開始探險</button>
     <button id="btn-howto" class="btn ghost">怎麼玩？</button>
     <a class="btn ghost" href="cards.html">卡片輪播（第二台裝置顯示卡片）</a>
-    <a class="btn ghost" href="reaction-quest/">🧪 進階版：反應式探險（大學生）</a>
   </div>
-  <span class="ver-tag">v1.4</span>
+  <span class="ver-tag">v1.0</span>
 </section>
 
 <!-- ═══════════ 玩法說明 ═══════════ -->
@@ -64,23 +64,27 @@
     <p class="kicker">HOW TO PLAY</p>
     <h2 class="page-title">怎麼玩</h2>
     <ol class="howto">
-      <li><b>選主角</b>：阿海、小玉、蛇紋獸，三選一。</li>
-      <li><b>選關卡數</b>：5 關（精華版）或 10 關（完整版）。</li>
-      <li><b>探索模式</b>：用畫面下方的方向鍵移動主角，走到會發光的目標點。</li>
-      <li><b>三種玩法</b>：每一關按「開始掃描」後可以選——<br>
-        <b>① 掃描卡片</b>：掃<b>遊戲萬用卡</b>（一張卡玩到底）或該關的專屬卡片，兩種都會過關。<br>
-        <b>② 免卡體驗</b>：手邊沒有卡片時，開後鏡頭把教學內容疊在實景上，還能拍照留念。<br>
-        <b>③ 跳過直接答題</b>：不開相機，直接看教學並作答。</li>
-      <li><b>答題過關</b>：教學內容浮現後回答一題；答錯會給提示，可以重試。</li>
-      <li><b>第二台裝置當卡片</b>：開 <a href="cards.html">卡片輪播頁</a>，用另一支手機／平板／筆電顯示卡片給這一台掃。</li>
+      <li><b>選主角</b>：泡泡 Mimi、蛇紋喵、水滴 Aqua，三選一。</li>
+      <li><b>選路線</b>：6 關精華（1、3、5、8、9、12）或 12 關完整版。</li>
+      <li><b>走迷宮</b>：方向鍵<b>一次走一格</b>，牆壁不能穿越。迷宮由固定亂數種子生成，
+        同一關永遠是同一張圖，可以練到熟。</li>
+      <li><b>先蒐集 3 個代幣</b>：每關有三個「試劑／條件」代幣藏在死路裡（例如第 8 關要蒐集
+        Fe³⁺、–OH、H₂O）。<b>集滿 3/3，終點才會開啟</b>。</li>
+      <li><b>小心陷阱格</b>：踩到「高溫爐」「有機溶劑」等違反綠色化學的格子會<b>退回起點</b>，
+        並跳出一句原則說明——懲罰本身就是教材。</li>
+      <li><b>限時挑戰</b>：第 5、8、11 關預設限時，可在關卡選單關閉。</li>
+      <li><b>掃描與答題</b>：走到終點按「開始掃描」，掃到卡片後 3D 反應式會浮現，
+        接著看教學面板，再回答<b>兩題</b>大學程度問答；答錯會給提示可重試。</li>
+      <li><b>全破總結</b>：列出八式完整反應鏈，並明確標出<b>哪些已證、哪些是研究假說</b>。</li>
     </ol>
     <div class="note">
       <b>萬用卡</b>：列印稿的<b>第 1 頁</b>就是萬用卡。整場只印這一張、只拿這一張，
-      就可以從第 1 關掃到第 10 關，不必每過一關換一張圖。
+      就可以從第 1 關掃到第 12 關，不必每過一關換一張圖。
     </div>
     <div class="note">
       <b>相機說明</b>：本遊戲需要使用手機的<b>後鏡頭</b>來辨識圖片。影像只在你的手機上即時處理，
       <b>不會上傳、不會儲存</b>。首次使用瀏覽器會詢問相機權限，請點「允許」。
+      手邊沒有卡片也沒關係——每一關都有「免卡體驗」與「跳過直接答題」。
     </div>
     <button class="btn primary big" data-go="scr-title">回到首頁</button>
     <a class="btn ghost" href="cards.html">開啟卡片輪播頁</a>
@@ -92,44 +96,55 @@
   <div class="pad">
     <p class="kicker">01 / CHOOSE YOUR HERO</p>
     <h2 class="page-title">選擇你的主角</h2>
-    <p class="page-sub">三位夥伴，個性不同，任務相同</p>
+    <p class="page-sub">三位原創夥伴，個性不同，任務相同</p>
     <div id="char-list" class="char-list"></div>
     <button id="btn-char-next" class="btn primary big" disabled>下一步</button>
+    <button class="btn ghost" data-go="scr-title">回到首頁</button>
   </div>
 </section>
 
-<!-- ═══════════ 選關卡數 ═══════════ -->
+<!-- ═══════════ 選路線 ═══════════ -->
 <section id="scr-mode" class="screen light">
   <div class="pad">
     <p class="kicker">02 / CHOOSE YOUR ROUTE</p>
-    <h2 class="page-title">選擇關卡數</h2>
-    <p class="page-sub">時間有限就走精華版，想學完整就走完整版</p>
+    <h2 class="page-title">選擇路線</h2>
+    <p class="page-sub">時間有限走精華版，想讀完整條反應鏈走完整版</p>
     <div class="mode-list">
-      <button class="mode-card" data-mode="5">
-        <span class="mode-n">5</span>
+      <button class="mode-card" data-mode="6">
+        <span class="mode-n">6</span>
         <span class="mode-t">精華版</span>
-        <span class="mode-d">約 15 分鐘<br>山與海・墨玉門把・水・微胞・杯墊</span>
+        <span class="mode-d">約 25 分鐘<br>層狀結構・三段分子・球磨・Fe³⁺・Mg²⁺・洗滌檢驗</span>
       </button>
-      <button class="mode-card" data-mode="10">
-        <span class="mode-n">10</span>
+      <button class="mode-card" data-mode="12">
+        <span class="mode-n">12</span>
         <span class="mode-t">完整版</span>
-        <span class="mode-d">約 30 分鐘<br>從在地資源一路走到綠色化學十二原則</span>
+        <span class="mode-d">約 50 分鐘<br>五個主角一路走到八式反應鏈全解</span>
       </button>
     </div>
+    <label class="opt-row">
+      <input type="checkbox" id="opt-timer" checked>
+      <span><b>開啟限時挑戰</b>（第 5、8、11 關）——關掉也能玩，只是少了一點壓力</span>
+    </label>
     <button class="btn ghost" data-go="scr-char">上一步</button>
   </div>
 </section>
 
-<!-- ═══════════ 探索模式 ═══════════ -->
+<!-- ═══════════ 探索模式：格狀迷宮 ═══════════ -->
 <section id="scr-explore" class="screen">
   <div id="stage" class="stage">
-    <div id="goal" class="goal"><span class="goal-ring"></span><span class="goal-dot">?</span></div>
-    <img id="hero" class="hero" alt="主角">
+    <div id="maze" class="maze">
+      <svg id="maze-svg" class="maze-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="maze-items" class="maze-items"></div>
+      <div id="goal" class="goal"><span class="goal-ring"></span><span class="goal-dot">?</span></div>
+      <img id="hero" class="hero" alt="主角">
+    </div>
   </div>
   <div class="hud-top">
     <div class="hud-bar">
       <span id="hud-level" class="hud-level">01</span>
       <span id="hud-place" class="hud-place"></span>
+      <span id="hud-token" class="hud-token">0 / 3</span>
+      <span id="hud-timer" class="hud-timer hidden">--:--</span>
       <span id="hud-prog" class="hud-prog"></span>
     </div>
     <div id="bubble" class="bubble"><p id="bubble-text"></p></div>
@@ -144,6 +159,23 @@
       <button class="dbtn down"  data-dir="down"  aria-label="向下">▼</button>
     </div>
   </div>
+
+  <!-- 陷阱說明（踩到違反綠色化學的格子） -->
+  <div id="trap-panel" class="trap-panel hidden">
+    <div class="trap-card">
+      <p class="trap-ico" id="trap-ico">🔥</p>
+      <h3 id="trap-name">陷阱</h3>
+      <p id="trap-msg" class="trap-msg"></p>
+      <p class="trap-back">已退回起點——蒐集到的代幣會保留。</p>
+      <button id="btn-trap-ok" class="btn primary big">我知道了，繼續走</button>
+    </div>
+  </div>
+
+  <!-- 代幣蒐集提示 -->
+  <div id="token-pop" class="token-pop hidden">
+    <span id="token-pop-k" class="token-pop-k"></span>
+    <span id="token-pop-t" class="token-pop-t"></span>
+  </div>
 </section>
 
 <!-- ═══════════ AR 掃描模式 ═══════════ -->
@@ -152,8 +184,6 @@
   <video id="cam-preview" class="cam-preview hidden" playsinline webkit-playsinline muted autoplay></video>
   <div id="ar-host"></div>
 
-  <!-- v1.4：三個明確模式取代 v1.2 的「開相機 ／ 沒有相機」二選一。
-       上一次用過的模式會被高亮並標示「上次用這個」，但玩家隨時可以改。 -->
   <div id="ar-intro" class="ar-panel">
     <div class="ar-card">
       <p class="kicker">AR SCAN</p>
@@ -190,7 +220,7 @@
       <p class="ar-note">影像只在你的裝置上即時處理，不會上傳、不會儲存。</p>
       <p class="ar-note">第二台裝置請開 <a href="cards.html" target="_blank" rel="noopener">cards.html</a> 顯示卡片，
         用另一支手機、平板或筆電當卡片給這一台掃。</p>
-      <button id="btn-ar-back" class="btn ghost small">回到探索</button>
+      <button id="btn-ar-back" class="btn ghost small">回到迷宮</button>
     </div>
   </div>
 
@@ -205,8 +235,7 @@
     <button id="btn-scan-cancel" class="btn ghost small">取消</button>
   </div>
 
-  <!-- v1.2 掃描成功層：固定定位 DOM，z-index 壓過 a-scene／canvas 所有層。
-       3D 疊加內容仍看得見（本層只佔上下兩條），4 秒後自動進入教學。 -->
+  <!-- 掃描成功層：固定定位 DOM，z-index 壓過 a-scene／canvas 所有層 -->
   <div id="ar-success" class="ar-success hidden">
     <div class="ar-success-banner">
       <span id="ar-success-mark" class="ar-success-mark">✓ 掃描成功！</span>
@@ -215,10 +244,7 @@
     <button id="btn-ar-teach" class="ar-success-btn">進入教學 ▶</button>
   </div>
 
-  <!-- ═══ v1.4 免卡體驗層 ═══
-       不需要 MindAR、不需要任何錨定：後鏡頭實景全螢幕，教學內容以半透明底板
-       疊在畫面中央（輕微上下浮動）。位置一律由靜態 CSS 決定，動畫只做位移點綴，
-       所以就算動畫被系統凍結（省電模式／prefers-reduced-motion）版面也不會跑掉。 -->
+  <!-- 免卡體驗層 -->
   <div id="ar-nocard" class="nocard-layer hidden">
     <div id="nocard-tilt" class="nocard-tilt">
       <div id="nocard-card" class="nocard-card">
@@ -239,7 +265,7 @@
         <p class="nocard-photo-t">學習瞬間已拍好</p>
         <img id="nocard-photo-img" alt="學習瞬間合成照片">
         <p class="nocard-photo-tip" id="nocard-photo-tip">手機請<b>長按圖片</b>選「儲存影像」；電腦可按下方按鈕下載。</p>
-        <a id="nocard-dl" class="btn primary" download="花蓮綠色化學闖關.png">下載照片</a>
+        <a id="nocard-dl" class="btn primary" download="蛇紋石改質反應探險.png">下載照片</a>
         <button id="btn-nocard-photo-close" class="btn ghost">關閉</button>
       </div>
     </div>
@@ -269,17 +295,20 @@
     <div class="ar-card teach">
       <p class="kicker">教學內容 · <span id="teach-en"></span></p>
       <h3 id="teach-title"></h3>
+      <p id="teach-hypo" class="hypo-tag hidden">研究假說（待驗證）</p>
+      <p id="teach-eq" class="teach-eq"></p>
       <div id="teach-visual" class="teach-visual"></div>
       <ul id="teach-points" class="teach-points"></ul>
-      <button id="btn-to-quiz" class="btn primary big">我懂了，來答題</button>
+      <button id="btn-to-quiz" class="btn primary big">我懂了，來答題（兩題）</button>
     </div>
   </div>
 </section>
 
-<!-- ═══════════ 問答 ═══════════ -->
+<!-- ═══════════ 問答（每關兩題） ═══════════ -->
 <section id="scr-quiz" class="screen light">
   <div class="pad">
     <p class="kicker">闖關問答 · <span id="quiz-level"></span></p>
+    <p id="quiz-step" class="quiz-step"></p>
     <h2 id="quiz-q" class="quiz-q"></h2>
     <div id="quiz-opts" class="quiz-opts"></div>
     <div id="quiz-fb" class="quiz-fb hidden"></div>
@@ -312,11 +341,23 @@
         <img id="badge-hero" class="badge-hero" alt="">
       </div>
       <div class="badge-txt">
-        <p class="badge-title">花蓮綠色化學闖關</p>
+        <p class="badge-title">蛇紋石改質反應探險</p>
         <p class="badge-name" id="badge-name"></p>
         <p class="badge-meta" id="badge-meta"></p>
         <p class="badge-org">國立東華大學自然資源與環境學系<br>仿生與環境工作坊</p>
       </div>
+    </div>
+
+    <h3 class="sec-h">八式完整反應鏈</h3>
+    <div id="chain-list" class="chain-list"></div>
+    <div class="legend">
+      <span class="lg done">■ 已確立</span>
+      <span class="lg hypo">■ 研究假說（待驗證）</span>
+    </div>
+    <div class="note hypo-note">
+      <b>哪些是假說？</b>第四式（Fe³⁺ 與表面 –OH 形成內圈錯合物）與第五式（Mg²⁺ 補進晶格缺陷），
+      以及「放射率由 0.86 提升至 0.93」的目標，都屬本研究依文獻推導之假說，
+      尚未由本研究實驗數據證實。假說有文獻基礎、有驗證方法，也有可能被推翻——這才叫科學。
     </div>
 
     <h3 class="sec-h">五個帶走的概念</h3>
@@ -327,7 +368,7 @@
 
     <button id="btn-share" class="btn primary big">分享我的完成徽章</button>
     <button id="btn-restart" class="btn ghost">再玩一次</button>
-    <p class="foot">全部插畫、圖表與角色皆為本專案自繪，零版權素材。</p>
+    <p class="foot">全部插畫、角色、場景、卡片與圖表皆為本專案自繪，零版權素材。</p>
   </div>
 </section>
 
