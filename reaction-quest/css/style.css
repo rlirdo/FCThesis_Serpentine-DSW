@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 v2.0 — 全程懸浮式 AR
+/* 蛇紋石改質反應探險 v2.1 — 全程懸浮式 AR
    層次（由下而上）：
      0  相機實景（<video>／無相機時的場景 SVG）
      1  A-Frame 懸浮舞台（透明畫布，主角／代幣／看板／題目都在這裡）
@@ -82,10 +82,19 @@ body.nocam .scene-bg{display:block}
 .act-col{pointer-events:auto;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
 .act-btn{pointer-events:auto;min-width:132px;padding:13px 18px;border-radius:26px;border:none;
   background:var(--gold);color:var(--navy);font-size:16px;font-weight:800;cursor:pointer;
-  box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  min-height:44px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .act-btn.ghost{background:rgba(11,31,58,.78);color:#fff;border:1px solid rgba(255,255,255,.28);
-  font-size:14px;min-width:120px;padding:11px 16px}
+  font-size:14px;min-width:120px;padding:11px 16px;min-height:44px}
 .act-btn:disabled{opacity:.6}
+/* v2.1「再試一次」：大顆、高對比、必達 44px 觸控目標 */
+.act-btn.retry{background:var(--moss);color:var(--navy);min-height:52px;min-width:150px;
+  font-size:17px;font-weight:800;border:2px solid #fff;
+  box-shadow:0 6px 20px rgba(0,0,0,.45);animation:retryPulse 1.6s ease-in-out infinite}
+@keyframes retryPulse{
+  0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.45),0 0 0 0 rgba(95,169,138,.55)}
+  50%{box-shadow:0 6px 20px rgba(0,0,0,.45),0 0 0 10px rgba(95,169,138,0)}
+}
+@media (prefers-reduced-motion:reduce){.act-btn.retry{animation:none}}
 
 /* ═══ 4. 全螢幕頁（標題／說明／診斷） ═══ */
 .screen{position:fixed;inset:0;z-index:4;display:none;overflow-y:auto;
@@ -102,16 +111,36 @@ body.nocam .scene-bg{display:block}
 .big-title{font-size:38px;line-height:1.2;font-weight:800;margin:0 0 8px}
 .sub-en{font-style:italic;color:#9FBCCB;font-size:13.5px;margin:0 0 18px}
 .pick-h{color:var(--moss);font-weight:800;font-size:13px;margin:16px 0 8px;letter-spacing:.5px}
-.pick-row{display:flex;gap:8px;flex-wrap:wrap}
+/* ── 選角／選路線卡（v2.1：選取態必須一眼分辨） ──
+   未選取：淺色白卡、opacity .85；選取：主角主色實底＋3px 金框＋1.04 放大＋✓ 標籤。
+   三張卡固定 16px 間距（選取態 1.04 放大會吃掉約 2px，實測仍 ≥12px），
+   各自獨立容器，矩形零相交。 */
+.pick-row{display:flex;gap:16px;flex-wrap:wrap}
 .pick-card{flex:1 1 30%;min-width:96px;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.22);
   border-radius:14px;padding:12px 8px;color:#fff;display:flex;flex-direction:column;gap:3px;
-  align-items:center;cursor:pointer}
+  align-items:center;cursor:pointer;position:relative;
+  transition:background-color .15s ease,border-color .15s ease,transform .15s ease,
+             opacity .15s ease,box-shadow .15s ease,color .15s ease}
 .pick-card.on{background:rgba(95,169,138,.22);border-color:var(--moss);box-shadow:0 0 0 2px rgba(95,169,138,.35)}
+/* 主角卡：未選取＝淺色白卡（降透明度），選取＝實色主色＋金框＋放大 */
+.pick-card.char{background:#F5F9FA;border:2px solid #cfdbe2;color:var(--navy);opacity:.85}
+.pick-card.char .pick-d{color:#4a6373}
+.pick-card.char.on{opacity:1;color:#fff;border-width:3px;border-color:var(--gold);
+  transform:scale(1.04);box-shadow:0 0 0 3px rgba(201,154,62,.30),0 10px 22px rgba(0,0,0,.42)}
+.pick-card.char.on .pick-d{color:#E7F1F5}
+.pick-ok{display:none;font-size:11.5px;font-weight:800;letter-spacing:.5px;
+  color:var(--gold);background:rgba(11,31,58,.55);border-radius:9px;padding:2px 8px;margin-top:3px}
+.pick-card.char.on .pick-ok{display:block}
+/* 路線卡沿用同一套選取語彙（金框＋放大），底色改用深海藍 */
+.pick-card[data-mode]{opacity:.85}
+.pick-card[data-mode].on{opacity:1;background:rgba(6,90,130,.92);border-width:3px;
+  border-color:var(--gold);transform:scale(1.04);
+  box-shadow:0 0 0 3px rgba(201,154,62,.30),0 10px 22px rgba(0,0,0,.42)}
 .pick-n{font-size:26px;font-weight:800;color:var(--gold);line-height:1}
 .pick-t{font-size:15px;font-weight:800}
 .pick-d{font-size:11.5px;color:#B8CEDA;text-align:center;line-height:1.4}
 .btn{display:block;width:100%;margin:10px 0 0;padding:15px 18px;border-radius:28px;border:none;
-  font-size:17px;font-weight:800;cursor:pointer;background:#e6edf1;color:var(--navy)}
+  font-size:17px;font-weight:800;cursor:pointer;background:#e6edf1;color:var(--navy);min-height:44px}
 .btn.primary{background:var(--gold);color:var(--navy)}
 .btn.big{padding:17px 18px;font-size:18px}
 .btn.ghost{background:transparent;border:1.5px solid rgba(255,255,255,.35);color:#fff;font-weight:700}

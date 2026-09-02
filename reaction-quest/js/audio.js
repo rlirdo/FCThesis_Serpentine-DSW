@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 — 原創合成音訊引擎 v2.0
+/* 蛇紋石改質反應探險 — 原創合成音訊引擎 v2.1
    ── 為什麼是即時合成而不是音檔 ──────────────────────────────────
    1. 零版權：全部由 Web Audio API 的振盪器（OscillatorNode）即時合成，
       沒有任何取樣素材、沒有任何授權疑慮，也不必附上來源標註。
@@ -9,19 +9,36 @@
    ── iOS 解鎖 ───────────────────────────────────────────────────
    iOS Safari 只允許在「使用者手勢的同步呼叫堆疊」內建立／resume AudioContext。
    因此 unlock() 必須在「開始冒險」的 click handler 內同步呼叫（不可 await 之後才呼叫），
-   並播一段長度為 1 的無聲 buffer 把硬體音訊管線真正叫醒。 */
+   並播一段長度為 1 的無聲 buffer 把硬體音訊管線真正叫醒。
+   ── v2.1：離開遊戲一定要停 ────────────────────────────────────
+   v2.0 的 stopBgm() 只把 curGain 斷線，排程器 interval 沒清、已排入未來的振盪器
+   也沒有 stop()，而且 AudioContext 從來不 suspend——iOS Safari 在切到背景時
+   不會自動暫停 AudioContext，於是使用者離開遊戲後手機仍持續有音樂。
+   v2.1 的修法：
+     1. 每一顆振盪器／雜訊源都登記在所屬 gain 的 __voices，stopBgm() 逐一 osc.stop(now)
+        並 disconnect，真正釋放節點。
+     2. stopBgm() 一定 clearInterval 排程器。
+     3. visibilitychange(hidden)／pagehide／beforeunload／blur／freeze 一律
+        panic()：停 BGM ＋ ctx.suspend()。回到前景不自動續播，
+        要等使用者的下一個手勢或遊戲進入下一階段才播。
+     4. bgm(name, {once:true, ms:N}) 可讓過關 jingle 播完一輪就自己淡出停止。
+     5. 內建 AnalyserNode，AUDIO.rms() 可直接量到「是否真的無聲」。 */
 window.AUDIO = (function () {
 
   var KEY_MUTE = 'rq_muted_v2';
-  var ctx = null, master = null, musicBus = null, sfxBus = null;
+  var ctx = null, master = null, musicBus = null, sfxBus = null, analyser = null;
+  var anaBuf = null;
   var muted = false;
   var cur = null;            // 目前 BGM 名稱
   var curGain = null;        // 目前 BGM 的音量節點
   var timer = 0;             // 排程器 interval
+  var onceTimer = 0;         // 「播一輪就停」的計時器
   var nextTime = 0;          // 下一個 step 的絕對時間
   var step = 0;              // 目前在第幾個 step
   var LOOKAHEAD = 0.2, TICK = 60;
-  var log = { bgm: [], sfx: [] };   // 驗證用：記錄所有切換與觸發
+  var pendingTrack = null;   // 回到前景後、等使用者手勢才續播的曲目
+  var gestureArmed = false;
+  var log = { bgm: [], sfx: [], life: [] };   // 驗證用：記錄所有切換與觸發
 
   try { muted = localStorage.getItem(KEY_MUTE) === '1'; } catch (e) {}
 
@@ -105,10 +122,58 @@ window.AUDIO = (function () {
     ctx = new AC();
     master = ctx.createGain();
     master.gain.value = muted ? 0.0001 : 1;
-    master.connect(ctx.destination);
+    /* 驗證用分析節點：master → analyser → destination（不改變訊號） */
+    try {
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      anaBuf = new Float32Array(analyser.fftSize);
+      master.connect(analyser);
+      analyser.connect(ctx.destination);
+    } catch (e) { analyser = null; master.connect(ctx.destination); }
     musicBus = ctx.createGain(); musicBus.gain.value = 1; musicBus.connect(master);
     sfxBus = ctx.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+    bindLifecycle();
     return ctx;
+  }
+
+  /* 目前輸出的均方根振幅：0 代表真的無聲（驗證「離開後不再有音樂」用） */
+  function rms() {
+    if (!analyser || !anaBuf) return null;
+    try {
+      analyser.getFloatTimeDomainData(anaBuf);
+    } catch (e) { return null; }
+    var s = 0;
+    for (var i = 0; i < anaBuf.length; i++) s += anaBuf[i] * anaBuf[i];
+    return Math.sqrt(s / anaBuf.length);
+  }
+
+  /* ══════════ 振盪器登記簿：停得掉才叫停 ══════════
+     每一顆 OscillatorNode／AudioBufferSourceNode 都掛在所屬 gain 的 __voices 上，
+     killVoices() 會 stop(now) ＋ disconnect，讓已排入未來的音符不會繼續發聲。 */
+  function addVoice(bus, node, endT) {
+    if (!bus) return;
+    if (!bus.__voices) bus.__voices = [];
+    bus.__voices.push({ n: node, end: endT });
+    if (bus.__voices.length > 512) {
+      var now = ctx ? ctx.currentTime : 0;
+      bus.__voices = bus.__voices.filter(function (v) { return v.end > now; });
+    }
+  }
+  function killVoices(bus) {
+    if (!bus || !bus.__voices) return 0;
+    var now = ctx ? ctx.currentTime : 0, n = 0;
+    bus.__voices.forEach(function (v) {
+      try { if (v.n.stop) v.n.stop(now); n++; } catch (e) {}
+      try { v.n.disconnect(); } catch (e) {}
+    });
+    bus.__voices = [];
+    return n;
+  }
+  /* 驗證用：目前仍可能發聲的 BGM 振盪器數 */
+  function liveVoices() {
+    if (!curGain || !curGain.__voices || !ctx) return 0;
+    var now = ctx.currentTime;
+    return curGain.__voices.filter(function (v) { return v.end > now; }).length;
   }
 
   /* 必須在使用者手勢的同步堆疊內呼叫（iOS 硬規） */
@@ -136,6 +201,7 @@ window.AUDIO = (function () {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(bus);
     o.start(t); o.stop(t + dur + 0.03);
+    addVoice(bus, o, t + dur + 0.03);
   }
   function noise(bus, t, dur, vol, hp) {
     if (!ctx || !bus) return;
@@ -148,6 +214,7 @@ window.AUDIO = (function () {
     var g = ctx.createGain(); g.gain.value = vol;
     s.connect(f); f.connect(g); g.connect(bus);
     s.start(t);
+    addVoice(bus, s, t + dur + 0.03);
   }
 
   /* 前瞻排程器：無縫循環的關鍵 */
@@ -174,23 +241,28 @@ window.AUDIO = (function () {
     }
   }
 
-  /* 切換 BGM：舊軌 400 ms 淡出、新軌 400 ms 淡入 —— 切換不斷音 */
-  function bgm(name) {
+  /* 一輪（32 step）的實際秒數，「播一次就停」用 */
+  function trackDur(name) {
+    var T = TRACKS[name];
+    if (!T) return 0;
+    return T.bass.length * (60 / T.bpm / T.spb);
+  }
+
+  /* 切換 BGM：舊軌 400 ms 淡出、新軌 400 ms 淡入 —— 切換不斷音
+     opts: {once:true} 播完一輪自己停；{ms:N} 指定 N 毫秒後開始淡出並停 */
+  function bgm(name, opts) {
     if (!TRACKS[name]) return false;
     ensure();
     if (!ctx) return false;
-    if (cur === name) return true;
-    log.bgm.push({ t: Date.now(), name: name });
-    console.log('[AUDIO] BGM ->', name);
-    if (curGain) {
-      var old = curGain, now = ctx.currentTime;
-      try {
-        old.gain.cancelScheduledValues(now);
-        old.gain.setValueAtTime(old.gain.value, now);
-        old.gain.linearRampToValueAtTime(0.0001, now + 0.4);
-      } catch (e) {}
-      setTimeout((function (g) { return function () { try { g.disconnect(); } catch (e) {} }; })(old), 900);
-    }
+    opts = opts || {};
+    /* 從背景回來（suspended）時，切下一階段的 BGM 要先把 ctx 叫醒 */
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    pendingTrack = null;
+    if (onceTimer) { clearTimeout(onceTimer); onceTimer = 0; }
+    if (cur === name && !opts.once) return true;
+    log.bgm.push({ t: Date.now(), name: name, once: !!opts.once });
+    console.log('[AUDIO] BGM ->', name, opts.once ? '(once)' : '');
+    if (curGain) fadeKill(curGain, 0.4);
     cur = name;
     curGain = ctx.createGain();
     curGain.gain.setValueAtTime(0.0001, ctx.currentTime);
@@ -200,12 +272,97 @@ window.AUDIO = (function () {
     step = 0;
     if (!timer) timer = setInterval(schedule, TICK);
     schedule();
+    if (opts.once || opts.ms) {
+      var ms = opts.ms || Math.round(trackDur(name) * 1000);
+      onceTimer = setTimeout(function () {
+        onceTimer = 0;
+        console.log('[AUDIO] BGM once done ->', name);
+        stopBgm(0.4);
+      }, Math.max(200, ms - 400));
+    }
     return true;
   }
-  function stopBgm() {
+
+  /* 淡出 → 停掉所有振盪器 → 斷線釋放（不是只斷線） */
+  function fadeKill(g, sec) {
+    if (!g || !ctx) return;
+    var now = ctx.currentTime;
+    try {
+      g.gain.cancelScheduledValues(now);
+      g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), now);
+      g.gain.linearRampToValueAtTime(0.0001, now + (sec || 0.4));
+    } catch (e) {}
+    setTimeout(function () {
+      killVoices(g);
+      try { g.disconnect(); } catch (e) {}
+    }, Math.round((sec || 0.4) * 1000) + 60);
+  }
+
+  /* 停止 BGM：清排程 timer ＋ 停所有已排程振盪器 ＋ 釋放節點
+     fade 省略或 0 → 立即硬停（離開頁面時用） */
+  function stopBgm(fade) {
     if (timer) { clearInterval(timer); timer = 0; }
-    if (curGain) { try { curGain.disconnect(); } catch (e) {} }
-    curGain = null; cur = null;
+    if (onceTimer) { clearTimeout(onceTimer); onceTimer = 0; }
+    var g = curGain;
+    cur = null; curGain = null;
+    if (!g) return true;
+    if (fade && ctx) { fadeKill(g, fade); return true; }
+    killVoices(g);
+    try { g.disconnect(); } catch (e) {}
+    return true;
+  }
+
+  /* ══════════ 離開／背景：硬性停音 ══════════ */
+  function suspend() {
+    if (!ctx) return 'none';
+    try { if (ctx.state === 'running') ctx.suspend(); } catch (e) {}
+    return ctx.state;
+  }
+  /* 離開遊戲、切到背景、關閉分頁時一律走這裡 */
+  function panic(why) {
+    /* 連續事件（visibilitychange 之後緊接著 pagehide）不可把已記下的曲目蓋成 null，
+       否則回到前景後就沒有東西可以續播了。 */
+    if (cur) pendingTrack = cur;
+    log.life.push({ t: Date.now(), ev: why || 'panic', had: pendingTrack });
+    stopBgm();                 // 硬停：清 timer、stop 所有振盪器
+    killVoices(sfxBus);        // 連音效也一起停
+    suspend();
+    console.log('[AUDIO] panic <-', why, '→', ctx ? ctx.state : 'none');
+    armGesture();
+    return true;
+  }
+  /* 回到前景不自動續播：等使用者的下一個手勢（或遊戲進入下一階段呼叫 bgm()） */
+  function armGesture() {
+    if (gestureArmed) return;
+    gestureArmed = true;
+    var h = function () {
+      document.removeEventListener('pointerdown', h, true);
+      document.removeEventListener('keydown', h, true);
+      gestureArmed = false;
+      if (document.hidden) return;
+      var t = pendingTrack; pendingTrack = null;
+      if (!ctx || !t) return;
+      try { if (ctx.state !== 'running') ctx.resume(); } catch (e) {}
+      log.life.push({ t: Date.now(), ev: 'resume-by-gesture', had: t });
+      bgm(t);
+    };
+    document.addEventListener('pointerdown', h, true);
+    document.addEventListener('keydown', h, true);
+  }
+
+  var lifeBound = false;
+  function bindLifecycle() {
+    if (lifeBound) return;
+    lifeBound = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden || document.visibilityState === 'hidden') panic('visibilitychange');
+    });
+    window.addEventListener('pagehide', function () { panic('pagehide'); });
+    window.addEventListener('beforeunload', function () { panic('beforeunload'); });
+    window.addEventListener('blur', function () { panic('blur'); });
+    /* iOS / Chrome 的頁面凍結事件：保險起見也接 */
+    document.addEventListener('freeze', function () { panic('freeze'); });
+    console.log('[AUDIO] lifecycle hooks bound');
   }
 
   /* 七個音效 */
@@ -251,6 +408,13 @@ window.AUDIO = (function () {
       note(sfxBus, hz(58), t, 0.22, 'square', 0.12);
       note(sfxBus, hz(55), t + 0.14, 0.32, 'square', 0.11);
     },
+    /* 再試一次：短促上行四度＋輕擊，語氣是「來，重來一遍」而不是失敗 */
+    retry: function (t) {
+      note(sfxBus, hz(69), t, 0.16, 'triangle', 0.22);
+      note(sfxBus, hz(74), t + 0.09, 0.26, 'triangle', 0.22);
+      note(sfxBus, hz(57), t, 0.30, 'sine', 0.16);
+      noise(sfxBus, t + 0.02, 0.05, 0.045, 5200);
+    },
     /* 過關：六音號角 */
     clear: function (t) {
       [72, 76, 79, 84, 79, 84].forEach(function (m, i) {
@@ -273,6 +437,8 @@ window.AUDIO = (function () {
   function sfx(name) {
     ensure();
     if (!ctx || !SFX[name]) return false;
+    /* 頁面在背景時一律不出聲，也不把 suspended 的 ctx 叫醒 */
+    if (document.hidden || document.visibilityState === 'hidden') return false;
     if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
     log.sfx.push({ t: Date.now(), name: name });
     console.log('[AUDIO] SFX ->', name);
@@ -295,9 +461,20 @@ window.AUDIO = (function () {
   function toggle() { return setMuted(!muted); }
   function isMuted() { return muted; }
 
+  function sfxTail() {
+    ensure();
+    if (!ctx) return false;
+    killVoices(sfxBus);
+    return true;
+  }
+
   return {
     unlock: unlock, state: state, bgm: bgm, stopBgm: stopBgm, sfx: sfx,
     setMuted: setMuted, toggle: toggle, isMuted: isMuted,
+    suspend: suspend, panic: panic, stopAll: function () { return panic('stopAll'); },
+    killSfx: sfxTail, rms: rms, liveVoices: liveVoices, trackDur: trackDur,
+    hasTimer: function () { return !!timer || !!onceTimer; },
+    pending: function () { return pendingTrack; },
     TRACK_NAMES: Object.keys(TRACKS), SFX_NAMES: Object.keys(SFX),
     current: function () { return cur; },
     log: log,

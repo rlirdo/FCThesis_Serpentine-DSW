@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 — 流程控制 v2.0（全程懸浮式 AR）
+/* 蛇紋石改質反應探險 — 流程控制 v2.1（全程懸浮式 AR）
    ══════════════════════════════════════════════════════════════════
    與 v1.1 的差別，一句話：**沒有任何一頁 2D 文字了**。
    從按下「開始冒險」的那一刻起，背景永遠是相機實景，
@@ -13,7 +13,7 @@
    全破 → 八式反應鏈環繞主角旋轉（已證／假說分色）＋ 完成徽章截圖 */
 (function () {
 
-  var V = '2.0';
+  var V = '2.1';
   var BASIC = [1, 3, 5, 8, 12];
   var ADV = [1, 3, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -49,6 +49,17 @@
   }
 
   /* ══════════ 標題頁 ══════════ */
+  /* v2.1：選取態要「一眼看得出來」——實色主角主色底 ＋ 3px 金框 ＋ 1.04 放大 ＋ ✓ 標籤。
+     未選取者維持淺色白卡並降到 opacity .85，兩者相對亮度對比 ≥ 3:1。 */
+  var SEL_COLOR = { mimi: '#065A82', serpy: '#2E7D5B', aqua: '#1C7293' };
+  function paintCharCards() {
+    $$('#char-row .pick-card').forEach(function (x) {
+      var on = x.classList.contains('on');
+      x.style.background = on ? (SEL_COLOR[x.dataset.char] || '#065A82') : '';
+      x.style.borderColor = on ? '#C99A3E' : (x.dataset.accent || '');
+      x.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
   function buildTitle() {
     var row = $('#char-row');
     row.innerHTML = '';
@@ -56,17 +67,20 @@
       var b = document.createElement('button');
       b.className = 'pick-card char' + (c.id === S.charId ? ' on' : '');
       b.dataset.char = c.id;
+      b.dataset.accent = c.color;
       b.innerHTML = '<span class="pick-t">' + c.name + '</span>' +
-                    '<span class="pick-d">' + c.trait + '</span>';
-      b.style.borderColor = c.color;
+                    '<span class="pick-d">' + c.trait + '</span>' +
+                    '<span class="pick-ok">✓ 已選擇</span>';
       row.appendChild(b);
     });
+    paintCharCards();
     row.addEventListener('click', function (e) {
       var b = e.target.closest('[data-char]');
       if (!b) return;
       S.charId = b.dataset.char;
       $$('#char-row .pick-card').forEach(function (x) { x.classList.remove('on'); });
       b.classList.add('on');
+      paintCharCards();
     });
     $$('.pick-card[data-mode]').forEach(function (b) {
       if (parseInt(b.dataset.mode, 10) === S.route) b.classList.add('on');
@@ -172,6 +186,7 @@
                    : '把萬用卡放進畫面，主角就會站上去；先收集三個代幣。');
       show($('#hud'));
       hide($('#btn-next')); hide($('#btn-replay'));
+      hideRescue();
       dpadEnabled(true);
       veil(false);
       /* 六秒還沒看到卡片就把免卡解鎖露出來 */
@@ -201,6 +216,8 @@
     var L = S.level;
     AUDIO.bgm('scan');
     STAGE.clearBoards();
+    /* v2.1：主角站到卡片前緣（畫面下半部），把上半部讓給關鍵物件與看板 */
+    STAGE.moveHeroTo(0, 0.20);
     STAGE.showKeyObject(L.ar.visual);
     hint('三個代幣到齊——本關的關鍵物件從卡片上升起來了。');
     setTimeout(function () {
@@ -237,12 +254,18 @@
   function askQuiz() {
     var qs = (window.QUIZ_DATA && QUIZ_DATA[S.level.n]) || [];
     if (S.quizI >= qs.length) return levelClear();
-    var q = qs[S.quizI];
     S.tries = 0;
+    hideRescue();
+    return mountQuiz(qs[S.quizI], qs.length);
+  }
+  /* 把「把題目擺上舞台」抽出來，答錯後的「再試一次」可以原樣重來一遍 */
+  function mountQuiz(q, total) {
+    S.phase = 'quiz';
     AUDIO.bgm('quiz');
     STAGE.hideKeyObject();
+    QUIZ3D.close();
     STAGE.showBoard({
-      kicker: '第 ' + (S.quizI + 1) + ' 題 / 共 ' + qs.length + '　' + kindName(q),
+      kicker: '第 ' + (S.quizI + 1) + ' 題 / 共 ' + total + '　' + kindName(q),
       lines: [q.q, '（' + cueOf(q) + '）'],
       tag: q.hypo ? '研究假說（待驗證）' : null,
       accent: q.hypo ? STAGE.C.gold : STAGE.C.teal,
@@ -251,7 +274,37 @@
     hide($('#btn-next'));
     if (q.type === 'anim') show($('#btn-replay')); else hide($('#btn-replay'));
     hint('用手指直接點畫面裡的懸浮物件作答。');
-    QUIZ3D.ask(q, { onAnswer: onAnswer });
+    QUIZ3D.ask(q, { onAnswer: onAnswer });      // 物件歸位、動畫計時重新起算
+    STAGE.requestLayout();
+    return true;
+  }
+
+  /* ══════════ 救援按鈕（v2.1） ══════════
+     答錯不再只是丟一句提示就沒事——畫面下方一定會出現大顆「🔁 再試一次」。
+     連續答錯 2 次後再多給「看提示」與「回本關開頭」兩條路，不會卡死。 */
+  function hideRescue() {
+    hide($('#btn-retry')); hide($('#btn-tip')); hide($('#btn-lvtop')); hide($('#btn-again'));
+  }
+  function retryQuiz() {
+    var qs = (window.QUIZ_DATA && QUIZ_DATA[S.level.n]) || [];
+    var q = qs[S.quizI];
+    if (!q) return false;
+    AUDIO.sfx('retry');
+    hide($('#btn-retry'));
+    /* 連錯兩次以上時「看提示／回本關開頭」留著，其餘收起 */
+    if (S.tries < 2) { hide($('#btn-tip')); hide($('#btn-lvtop')); }
+    mountQuiz(q, qs.length);
+    toast('重新出題——物件已歸位，動畫也重新開始。', 2000);
+    return true;
+  }
+  /* 回本關開頭：整關從收集階段重來（代幣、看板、關鍵物件全部重置） */
+  function restartLevel() {
+    AUDIO.sfx('retry');
+    hideRescue();
+    QUIZ3D.close();
+    STAGE.resetLayout();
+    startLevel(S.idx);
+    return true;
   }
   /* v2.0 的互動方式改為「點選」，v1.1 資料裡的拖曳提示要換掉 */
   var CUE = {
@@ -276,18 +329,22 @@
     if (!ok) {
       S.tries++;
       S.stats.wrong++;
-      STAGE.showBoard({ kicker: '再想一下', lines: [msg || q.tip || '再試一次。'],
+      S.phase = 'wrong';
+      STAGE.showBoard({ kicker: '再想一下', lines: [msg || q.tip || '沒關係，按下面的「再試一次」重來一遍。'],
                         accent: STAGE.C.red, y: 0.48, width: 1.24 });
-      hint('再試一次——點另一個看看。');
-      if (S.tries >= 2) {
-        setTimeout(function () { revealAnswer(q); }, 1400);
-      }
+      show($('#btn-retry'));
+      hide($('#btn-next'));
+      if (S.tries >= 2) { show($('#btn-tip')); show($('#btn-lvtop')); }
+      hint(S.tries >= 2 ? '連續兩次了——可以按「再試一次」，或按「看提示」直接看解析。'
+                        : '按下方的「🔁 再試一次」重來一遍。');
       return;
     }
     S.stats.right++;
+    hideRescue();
     revealAnswer(q);
   }
   function revealAnswer(q) {
+    hideRescue();
     QUIZ3D.close();
     STAGE.showBoard({ kicker: '為什麼', title: '答案解析', lines: [q.why],
                       tag: q.hypo ? '研究假說（待驗證）' : null,
@@ -303,8 +360,10 @@
   function levelClear() {
     S.phase = 'clear';
     QUIZ3D.close();
+    hideRescue();
     STAGE.hideKeyObject();
-    AUDIO.bgm('win');
+    /* 過關 jingle 只播一輪就自己淡出停止，不會一路蓋到下一關 */
+    AUDIO.bgm('win', { once: true });
     AUDIO.sfx('clear');
     STAGE.heroAnim('celebrate');
     var p = STAGE.heroPos();
@@ -319,6 +378,7 @@
                       lines: [S.level.lesson], accent: STAGE.C.gold, y: 0.34, width: 1.24 });
     hint('這一關學到的重點已經浮在畫面上了。');
     show($('#btn-next'));
+    show($('#btn-again'));          // 重玩本關
     $('#btn-next').textContent = (S.idx + 1 < S.list.length) ? '前往下一關 ▶' : '看總結 ▶';
   }
 
@@ -327,10 +387,12 @@
   function finish() {
     S.phase = 'finish';
     QUIZ3D.close();
+    hideRescue();
     STAGE.clearBoards();
     STAGE.hideKeyObject();
     STAGE.clearTokens();
-    AUDIO.bgm('win');
+    /* 全破：win 播一次（2.6 秒後淡出停止）＋ allclear 音效，之後畫面就安靜下來 */
+    AUDIO.bgm('win', { once: true, ms: 2600 });
     AUDIO.sfx('allclear');
     STAGE.heroAnim('celebrate');
     dpadEnabled(false);
@@ -386,7 +448,7 @@
       return levelClear();
     }
     if (S.phase === 'clear') {
-      hide($('#btn-next'));
+      hide($('#btn-next')); hide($('#btn-again'));
       if (S.idx + 1 < S.list.length) return startLevel(S.idx + 1);
       return finish();
     }
@@ -427,6 +489,29 @@
   }
   function bindHud() {
     $('#btn-next').addEventListener('click', onNext);
+    /* ── v2.1 救援按鈕 ── */
+    $('#btn-retry').addEventListener('click', retryQuiz);
+    $('#btn-lvtop').addEventListener('click', restartLevel);
+    $('#btn-tip').addEventListener('click', function () {
+      var qs = (window.QUIZ_DATA && QUIZ_DATA[S.level.n]) || [];
+      var q = qs[S.quizI];
+      if (!q) return;
+      AUDIO.sfx('retry');
+      hideRescue();
+      revealAnswer(q);
+    });
+    $('#btn-again').addEventListener('click', restartLevel);
+    $('#btn-badge-again').addEventListener('click', function () {
+      hide($('#badge-layer')); hide($('#shot-box'));
+      document.querySelector('.dpad').style.display = '';
+      STAGE.clearChainGroup();
+      restartLevel();
+    });
+    /* 結束遊戲：先把音樂與 AudioContext 徹底停掉，再回首頁 */
+    $('#btn-quit').addEventListener('click', function () {
+      AUDIO.panic('quit-button');
+      location.reload();
+    });
     $('#btn-mute').addEventListener('click', function () { AUDIO.toggle(); syncMuteBtn(); });
     $('#btn-power').addEventListener('click', function () {
       var on = STAGE.setPowerSave(!$('#btn-power').classList.contains('on'));
@@ -450,7 +535,9 @@
       t.select();
       try { document.execCommand('copy'); toast('診斷資訊已複製'); } catch (e) {}
     });
-    $('#btn-retry-cam').addEventListener('click', function () { location.reload(); });
+    $('#btn-retry-cam').addEventListener('click', function () {
+      AUDIO.panic('retry-cam'); location.reload();
+    });
     $('#btn-no-cam').addEventListener('click', function () { screen(null); });
     $('#btn-replay').addEventListener('click', function () { QUIZ3D.replay(); });
     $('#btn-nocard').addEventListener('click', function () {
@@ -475,7 +562,10 @@
         screen(g);
       });
     });
-    $('#btn-restart').addEventListener('click', function () { location.reload(); });
+    $('#btn-restart').addEventListener('click', function () {
+      AUDIO.panic('restart-button');
+      location.reload();
+    });
     $('#btn-shot').addEventListener('click', shot);
     $('#btn-shot-close').addEventListener('click', function () { hide($('#shot-box')); });
     $('#inapp-close').addEventListener('click', function () { hide($('#inapp-banner')); });
@@ -571,6 +661,32 @@
     finish: finish,
     goLevel: startLevel,
     unlockNoCard: function () { $('#btn-nocard').click(); },
-    simulate: function (k, i) { return STAGE.simulate(k, i); }
+    simulate: function (k, i) { return STAGE.simulate(k, i); },
+
+    /* ── v2.1 驗收掛鉤 ── */
+    /* 程式化觸發「答對／答錯」，走的是真正的 onAnswer（含音效、看板、救援按鈕） */
+    answer: function (ok) {
+      if (S.phase !== 'quiz' && S.phase !== 'wrong') return false;
+      var qs = (window.QUIZ_DATA && QUIZ_DATA[S.level.n]) || [];
+      var q = qs[S.quizI];
+      if (!q) return false;
+      onAnswer(!!ok, ok ? null : (q.tip || '（測試觸發的答錯）'));
+      return true;
+    },
+    retry: retryQuiz,
+    restartLevel: restartLevel,
+    /* 目前救援按鈕的可見狀態 */
+    rescue: function () {
+      var g = function (id) {
+        var e = $(id);
+        return !!e && !e.classList.contains('hidden');
+      };
+      return { retry: g('#btn-retry'), tip: g('#btn-tip'), lvtop: g('#btn-lvtop'),
+               again: g('#btn-again'), next: g('#btn-next'), tries: S.tries };
+    },
+    layout: function () { return STAGE.rectReport(); },
+    relayout: function (n) { return STAGE.relayout(n); },
+    heroRatio: function () { return STAGE.heroScreenRatio(); },
+    setChar: function (id) { S.charId = id; return S.charId; }
   };
 })();

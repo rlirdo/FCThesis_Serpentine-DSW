@@ -4,22 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0B1F3A">
-<meta name="description" content="蛇紋石改質反應探險 v2.0 — 全程懸浮式 WebAR 闖關｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
+<meta name="description" content="蛇紋石改質反應探險 v2.1 — 全程懸浮式 WebAR 闖關｜國立東華大學自然資源與環境學系 仿生與環境工作坊">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>蛇紋石改質反應探險</title>
-<link rel="stylesheet" href="css/style.css?v=2.0">
+<link rel="stylesheet" href="css/style.css?v=2.1">
 <script defer src="vendor/aframe.min.js"></script>
 <script defer src="vendor/mindar-image-aframe.prod.js"></script>
-<script defer src="js/data.js?v=2.0"></script>
-<script defer src="js/quizdata.js?v=2.0"></script>
-<script defer src="js/anims.js?v=2.0"></script>
-<script defer src="js/visuals.js?v=2.0"></script>
-<script defer src="js/char3d.js?v=2.0"></script>
-<script defer src="js/audio.js?v=2.0"></script>
-<script defer src="js/ar.js?v=2.0"></script>
-<script defer src="js/stage.js?v=2.0"></script>
-<script defer src="js/quiz3d.js?v=2.0"></script>
-<script defer src="js/game.js?v=2.0"></script>
+<script defer src="js/data.js?v=2.1"></script>
+<script defer src="js/quizdata.js?v=2.1"></script>
+<script defer src="js/anims.js?v=2.1"></script>
+<script defer src="js/visuals.js?v=2.1"></script>
+<script defer src="js/char3d.js?v=2.1"></script>
+<script defer src="js/audio.js?v=2.1"></script>
+<script defer src="js/ar.js?v=2.1"></script>
+<script defer src="js/stage.js?v=2.1"></script>
+<script defer src="js/quiz3d.js?v=2.1"></script>
+<script defer src="js/game.js?v=2.1"></script>
 </head>
 <body>
 
@@ -64,6 +64,11 @@
     <div class="act-col">
       <button id="btn-nocard" class="act-btn ghost hidden">免卡解鎖</button>
       <button id="btn-replay" class="act-btn ghost hidden">重看動畫</button>
+      <!-- v2.1：答錯／失敗時的救援按鈕（HUD 層 DOM，不是 3D 物件） -->
+      <button id="btn-tip" class="act-btn ghost hidden">💡 看提示</button>
+      <button id="btn-lvtop" class="act-btn ghost hidden">↺ 回本關開頭</button>
+      <button id="btn-retry" class="act-btn retry hidden">🔁 再試一次</button>
+      <button id="btn-again" class="act-btn ghost hidden">重玩本關</button>
       <button id="btn-next" class="act-btn hidden">繼續 ▶</button>
     </div>
   </div>
@@ -100,7 +105,7 @@
       <button id="btn-howto" class="btn ghost small">怎麼玩？</button>
     </div>
   </div>
-  <span class="ver-tag">v2.0</span>
+  <span class="ver-tag">v2.1</span>
 </section>
 
 <!-- ═══════════ 玩法說明 ═══════════ -->
@@ -139,6 +144,7 @@
     <button id="btn-retry-cam" class="btn primary big">重試相機</button>
     <button id="btn-no-cam" class="btn ghost">用場景背景繼續玩</button>
     <button id="btn-copy-diag" class="btn ghost small">📋 複製診斷資訊</button>
+    <button id="btn-quit" class="btn ghost small">⏹ 結束遊戲（停止音樂並回首頁）</button>
     <textarea id="diag-box" class="diag-box hidden" readonly rows="12"></textarea>
     <button class="btn ghost" data-go="back">關閉</button>
   </div>
@@ -153,7 +159,8 @@
     <p class="badge-org">國立東華大學自然資源與環境學系<br>仿生與環境工作坊</p>
   </div>
   <button id="btn-shot" class="btn primary">📸 拍下完成徽章</button>
-  <button id="btn-restart" class="btn ghost small">再玩一次</button>
+  <button id="btn-badge-again" class="btn ghost small">重玩本關</button>
+  <button id="btn-restart" class="btn ghost small">重新開始</button>
   <div id="shot-box" class="shot-box hidden">
     <img id="shot-img" alt="完成徽章">
     <p class="tiny">手機請<b>長按圖片</b>選「儲存影像」；電腦可按下方按鈕下載。</p>

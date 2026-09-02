@@ -1,4 +1,4 @@
-/* 蛇紋石改質反應探險 — 懸浮舞台（卡片即舞台）v2.0
+/* 蛇紋石改質反應探險 — 懸浮舞台（卡片即舞台）v2.1
    ══════════════════════════════════════════════════════════════════
    ── 架構：一個場景、一條串流、兩種掛法 ──────────────────────────
    v1.x 是「走 2D 迷宮 → 到終點才開相機掃一次卡 → 回到 2D 教學頁」。
@@ -51,6 +51,19 @@ window.STAGE = (function () {
 
   /* 棋盤邊界（卡片寬 1 單位，留邊） */
   var LIM = 0.42;
+
+  /* ══════════════ v2.1：主角放大與防重疊佈局 ══════════════
+     v2.0 主角在 375×812 只占畫面高度 13.1%，手機上太小。
+     HERO_SCALE 由 0.30 提高到 0.50（×1.667），投影高度落在 18–22% 目標帶。
+     主角一放大，就可能壓到代幣／關鍵物件／看板，因此加入 relayout()：
+     以「投影後的 2D 螢幕矩形」做碰撞檢查，分層外推到零相交——
+     主角在前（永不移動）、代幣環繞（半徑依主角投影尺寸推算）、
+     關鍵物件在後上方、看板在上方。卡片模式與螢幕懸浮 fallback 共用同一套。 */
+  var HERO_SCALE = 0.50;
+  var HERO_SCALE_BASE = 0.30;
+  var keyLift = 0;                  // 關鍵物件被推高的量（stage 單位）
+  var layoutInfo = null;            // 最近一次 relayout 的結果（驗證用）
+  var layoutPend = 0;
 
   /* ══════════════ 主角 ══════════════ */
   var hero = {
@@ -255,6 +268,8 @@ window.STAGE = (function () {
       buildParticles();
       syncFreeRig();
       setMode('free', false);
+      window.addEventListener('resize', requestLayout);
+      window.addEventListener('orientationchange', function () { setTimeout(requestLayout, 200); });
       bindTaps();
       hookAnchors(opts.onFound, opts.onLost);
       if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
@@ -318,7 +333,9 @@ window.STAGE = (function () {
       var f = syncFreeRig();
       log('arReady, freeRig synced', f);
     });
-    window.addEventListener('resize', function () { setTimeout(syncFreeRig, 60); });
+    window.addEventListener('resize', function () {
+      setTimeout(function () { syncFreeRig(); requestLayout(); }, 60);
+    });
     sys.start();
     trackingOn = true;
     log('tracking started');
@@ -431,6 +448,8 @@ window.STAGE = (function () {
       u.scale.setScalar(0.42);
     }
     if (animate) fadeIn(300);
+    /* 兩種掛法的投影尺寸不同 → 換掛法一定要重跑一次防重疊佈局 */
+    requestLayout();
     log('mode →', m);
     return mode;
   }
@@ -470,14 +489,15 @@ window.STAGE = (function () {
   /* ══════════════ 全像平台（主角腳下） ══════════════ */
   function buildPlatform() {
     platform = new T.Group();
+    var kS = HERO_SCALE / HERO_SCALE_BASE;      // 腳下光環跟著主角一起放大
     var disc = new T.Mesh(
-      new T.CircleGeometry(0.135, 28),
+      new T.CircleGeometry(0.135 * kS, 28),
       new T.MeshBasicMaterial({ color: 0x1C7293, transparent: true, opacity: 0.20,
                                 side: T.DoubleSide, depthWrite: false }));
     disc.rotation.x = -Math.PI / 2;
     disc.material.__keepTransparent = true;
     var ring = new T.Mesh(
-      new T.RingGeometry(0.135, 0.155, 32),
+      new T.RingGeometry(0.135 * kS, 0.155 * kS, 32),
       new T.MeshBasicMaterial({ color: 0x5FA98A, transparent: true, opacity: 0.55,
                                 side: T.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2;
@@ -555,7 +575,18 @@ window.STAGE = (function () {
   }
 
   /* ══════════════ 代幣 ══════════════ */
-  var TOKEN_SPOTS = [[-0.30, -0.20], [0.31, 0.06], [-0.02, 0.31]];
+  /* 代幣以「環繞主角」的極座標定義：角度固定、半徑由 relayout() 依主角投影尺寸推算。
+     v2.0 的三個直角座標點對應到 (r≈0.36, 0.32, 0.31)，改寫成同一組角度＋統一起始半徑。 */
+  /* 角度取自 v2.0 的第一、三個位置（兩者剛好相差 240°），中間那顆補成正三角形，
+     三顆彼此固定 120°，任何半徑下都不會互相靠攏。 */
+  var TOKEN_ANG = [-2.5536, -0.4592, 1.6353];   // atan2(z, x)
+  var TOKEN_R0 = 0.34;
+  var TOKEN_RMAX = 0.48;                        // 主角走到邊界(0.42)+收集半徑(0.24)仍拿得到
+  var TOKEN_Y0 = 0.30;
+  function tokenSpot(i, r) {
+    var a = TOKEN_ANG[i % 3], rr = r === undefined ? TOKEN_R0 : r;
+    return [Math.cos(a) * rr, Math.sin(a) * rr];
+  }
   function clearTokens() {
     tokens.forEach(function (t2) { stageEl.object3D.remove(t2.group); disposeTree(t2.group); });
     tokens = [];
@@ -563,9 +594,9 @@ window.STAGE = (function () {
   function setTokens(list) {
     clearTokens();
     (list || []).slice(0, 3).forEach(function (tk, i) {
-      var sp = TOKEN_SPOTS[i];
+      var sp = tokenSpot(i);
       var gp = new T.Group();
-      gp.position.set(sp[0], 0.30, sp[1]);
+      gp.position.set(sp[0], TOKEN_Y0, sp[1]);
       var core = new T.Mesh(new T.IcosahedronGeometry(0.055, 1),
         new T.MeshStandardMaterial({ color: 0xC99A3E, emissive: 0x6B4A12,
                                      roughness: 0.35, metalness: 0.3 }));
@@ -576,16 +607,20 @@ window.STAGE = (function () {
       halo.userData.faceCam = true;
       gp.add(core); gp.add(halo);
       var cv = drawChip(tk.label, C.gold);
-      var lab = planeFrom(cv, 0.26 * cv.width / 300, { order: 12 });
-      /* 靠邊的代幣把標籤往畫面中央拉，才不會被螢幕邊緣切掉 */
-      lab.position.set(-sp[0] * 0.55, 0.15, 0);
+      /* v2.1：標籤縮小並改置於代幣正上方。
+         v2.0 把標籤往畫面中央橫移，會讓代幣群組的投影矩形寬出約 50 px，
+         主角放大後就一定壓到主角；置中疊放可讓群組寬度只由標籤本身決定。 */
+      var lab = planeFrom(cv, 0.185 * cv.width / 300, { order: 12 });
+      lab.position.set(0, 0.155, 0);
       lab.userData.faceCam = true;
       gp.add(lab);
       stageEl.object3D.add(gp);
       tokens.push({ group: gp, core: core, halo: halo, label: lab, got: false,
-                    bx: sp[0], bz: sp[1], phase: i * 2.1, data: tk });
+                    bx: sp[0], bz: sp[1], by: TOKEN_Y0, r: TOKEN_R0, ang: TOKEN_ANG[i % 3],
+                    phase: i * 2.1, data: tk });
     });
     collectMats();
+    requestLayout();
     return tokens.length;
   }
   function tokenState() {
@@ -605,9 +640,11 @@ window.STAGE = (function () {
     var m = planeFrom(cv, w, { order: 14 });
     var h = w * cv.height / cv.width;
     m.position.set(0, (o.y === undefined ? 0 : o.y) - h / 2, 0);
+    m.userData.baseY = m.position.y;
     uiEl.object3D.add(m);
     boards.push(m);
     collectMats();
+    requestLayout();
     return m;
   }
   function showBoards(list, y0) {
@@ -619,12 +656,351 @@ window.STAGE = (function () {
       var m = planeFrom(cv, w, { order: 14 });
       var hgt = w * cv.height / cv.width;
       m.position.set(0, y - hgt / 2, 0);
+      m.userData.baseY = m.position.y;
       y -= hgt + 0.06;
       uiEl.object3D.add(m);
       boards.push(m);
     });
     collectMats();
+    requestLayout();
     return boards.length;
+  }
+
+  /* ══════════════ 防重疊佈局（投影 2D 矩形碰撞） ══════════════
+     ── 為什麼要投影到螢幕做碰撞 ────────────────────────────────
+     主角、代幣在 stage 空間（貼卡面、旋轉 90°），看板在 ui 空間（另一組位移與縮放），
+     兩邊的世界座標不可直接比較距離；唯一「使用者真正看到的重疊」是**投影後的畫面矩形**。
+     所以一律把每個物件的世界包圍盒八個角投到 CSS 像素，再做 AABB 相交判斷。
+     ── 分層與外推方向 ──────────────────────────────────────────
+       主角      永不移動（他是主體）
+       代幣      沿極座標往外推（半徑 +0.02／次，上限 TOKEN_RMAX），推到底再往上抬
+       關鍵物件  往上抬（keyLift +0.03／次）
+       看板      往上抬（+0.03／次），抬到畫面上緣就停 */
+  var KEY_Y = 0.52, KEY_Z = -0.05;
+  /* 關鍵物件的候選位置格點：5 段深度（往卡片後方退）× 25 段高度 */
+  var KEY_NZ = 5, KEY_NY = 25, KEY_DZ = 0.13;
+  var KEY_LIFT_LO = -0.42, KEY_LIFT_HI = 0.80;
+  var KEY_IDX0 = Math.round((0 - KEY_LIFT_LO) / (KEY_LIFT_HI - KEY_LIFT_LO) * (KEY_NY - 1));
+  var keyIdx = KEY_IDX0, keyBack = 0;
+  function setKeyIdx(v) {
+    keyIdx = Math.max(0, Math.min(KEY_NZ * KEY_NY - 1, Math.round(v)));
+    var zi = Math.floor(keyIdx / KEY_NY), yi = keyIdx % KEY_NY;
+    keyBack = zi * KEY_DZ;
+    keyLift = KEY_LIFT_LO + (KEY_LIFT_HI - KEY_LIFT_LO) * yi / (KEY_NY - 1);
+    if (keyObjEl && keyObjEl.object3D) {
+      keyObjEl.object3D.position.set(0, 0.05 + (KEY_Y + keyLift), KEY_Z - keyBack);
+      keyObjEl.object3D.updateWorldMatrix(true, true);
+    }
+    return keyIdx;
+  }
+  var PAD_PX = 8;                    // 兩個矩形之間至少要留的空隙（CSS px）
+  var _box = null, _v3 = null;
+
+  function canvasRect() {
+    var c = sceneEl && sceneEl.canvas;
+    if (c) {
+      var r = c.getBoundingClientRect();
+      if (r.width > 4 && r.height > 4) return r;
+    }
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  }
+  /* 物件（含子樹）投影後的螢幕矩形；沒有可見網格時回傳 null */
+  function screenRect(obj, inflate) {
+    if (!obj || !sceneEl || !sceneEl.camera) return null;
+    if (!_box) { _box = new T.Box3(); _v3 = new T.Vector3(); }
+    _box.makeEmpty();
+    var any = false, i;
+    obj.traverseVisible(function (n) {
+      if (n === particles || !n.geometry) return;
+      if (!n.isMesh && !n.isPoints) return;
+      if (!n.geometry.boundingBox) { try { n.geometry.computeBoundingBox(); } catch (e) { return; } }
+      var bb = n.geometry.boundingBox;
+      if (!bb) return;
+      n.updateWorldMatrix(true, false);
+      for (var j = 0; j < 8; j++) {
+        _v3.set(j & 1 ? bb.max.x : bb.min.x, j & 2 ? bb.max.y : bb.min.y,
+                j & 4 ? bb.max.z : bb.min.z);
+        _v3.applyMatrix4(n.matrixWorld);
+        _box.expandByPoint(_v3);
+        any = true;
+      }
+    });
+    if (!any) return null;
+    var cam = sceneEl.camera, r = canvasRect();
+    var x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+    for (i = 0; i < 8; i++) {
+      _v3.set(i & 1 ? _box.max.x : _box.min.x, i & 2 ? _box.max.y : _box.min.y,
+              i & 4 ? _box.max.z : _box.min.z);
+      _v3.project(cam);
+      var sx = r.left + (_v3.x + 1) / 2 * r.width;
+      var sy = r.top + (1 - _v3.y) / 2 * r.height;
+      if (sx < x1) x1 = sx; if (sx > x2) x2 = sx;
+      if (sy < y1) y1 = sy; if (sy > y2) y2 = sy;
+    }
+    var pad = inflate || 0;
+    return { x1: x1 - pad, y1: y1 - pad, x2: x2 + pad, y2: y2 + pad,
+             w: (x2 - x1) + pad * 2, h: (y2 - y1) + pad * 2 };
+  }
+  function rectHit(a, b, pad) {
+    if (!a || !b) return 0;
+    var p = pad === undefined ? PAD_PX : pad;
+    var w = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + p * 2;
+    var h = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + p * 2;
+    return (w > 0 && h > 0) ? w * h : 0;
+  }
+  function heroRect() {
+    return hero.yawEl && hero.yawEl.object3D ? screenRect(hero.yawEl.object3D) : null;
+  }
+  /* 主角投影高度佔畫面的比例（驗收指標：18–22%） */
+  function heroScreenRatio() {
+    var r = heroRect();
+    if (!r) return null;
+    var c = canvasRect();
+    return { h: r.h, w: r.w, vh: c.height, ratio: r.h / c.height };
+  }
+
+  /* ── 為什麼用「爬山搜尋」而不是單向外推 ─────────────────────────
+     單向外推（碰到就把半徑加大）在傾斜 52° 的螢幕懸浮模式會失控：
+     半徑一大，代幣就往畫面上方＋外側衝，直接飛出螢幕。
+     所以改成：每顆代幣試 6 個候選動作（半徑 ±、高度 ±、環繞角度 ±），
+     以「總相交面積 ＋ 出界懲罰」當成本函數，挑最能降低成本的那一步；
+     沒有任何一步能改善就停。上下界保證代幣一定留在可收集範圍與畫面內。 */
+  var TOKEN_RMIN = 0.24, TOKEN_YMIN = 0.10, TOKEN_YMAX = 0.62, TOKEN_DANG = 0.75;
+
+  function applyToken(t2, i) {
+    var sp = tokenSpot(i, t2.r);
+    /* ang 可能被搜尋微調過，用 t2.ang 覆蓋預設角度 */
+    sp = [Math.cos(t2.ang) * t2.r, Math.sin(t2.ang) * t2.r];
+    t2.bx = sp[0]; t2.bz = sp[1];
+    t2.group.position.set(t2.bx, t2.by, t2.bz);
+    t2.group.updateWorldMatrix(true, true);
+  }
+  /* 一顆代幣目前的「成本」：與其他元素的相交面積＋出界懲罰 */
+  function tokenCost(i, others, cRect) {
+    var t2 = tokens[i];
+    var r = screenRect(t2.group, 6);
+    if (!r) return 0;
+    var c = 0, k;
+    for (k = 0; k < others.length; k++) c += rectHit(r, others[k]);
+    /* 出界：每超出 1 px 罰 400（遠重於一般相交，確保不會被推出畫面） */
+    var out = Math.max(0, cRect.left + 6 - r.x1) + Math.max(0, r.x2 - (cRect.left + cRect.width - 6)) +
+              Math.max(0, cRect.top + 6 - r.y1) + Math.max(0, r.y2 - (cRect.top + cRect.height - 6));
+    return c + out * 400;
+  }
+
+  /* 一個「可移動元件」的通用描述：get() 取矩形、try(v) 試放、knobs 是候選位移 */
+  function movables() {
+    var list = [];
+    /* 看板：可上可下（頂到畫面上緣時往下走，讓開關鍵物件） */
+    boards.forEach(function (b, i) {
+      var base = b.userData.baseY === undefined ? b.position.y : b.userData.baseY;
+      list.push({
+        id: 'board' + i, obj: b, pad: 0,
+        get: function () { return b.position.y; },
+        set: function (v) { b.position.y = v; b.updateWorldMatrix(true, true); },
+        rect: function () { return screenRect(b); },
+        base: base, lo: base - 1.70, hi: base + 1.05, steps: 56
+      });
+    });
+    /* 關鍵物件：兩個旋鈕（抬高 y、往後 z）壓成一維格點掃描。
+       「後上方」是設計位階，往後退可以離開主角的投影區而不必無限抬高。 */
+    if (keyObjEl && keyObjEl.object3D.visible && keyObjEl.getAttribute('visible') !== false &&
+        !keyObjEl.object3D.userData.rise) {
+      list.push({
+        id: 'key', obj: keyObjEl.object3D, pad: 0,
+        get: function () { return keyIdx; },
+        set: function (v) { setKeyIdx(v); },
+        rect: function () { return screenRect(keyObjEl.object3D); },
+        base: KEY_IDX0, lo: 0, hi: KEY_NZ * KEY_NY - 1, steps: KEY_NZ * KEY_NY - 1
+      });
+    }
+    return list;
+  }
+
+  function relayout(maxIter) {
+    if (!sceneEl || !sceneEl.camera || !stageEl) return null;
+    var iters = maxIter === undefined ? 18 : maxIter;
+    var info = { iter: 0, tokenR: [], keyLift: keyLift, boardDY: [], hits: [], hero: null, moves: 0 };
+    var it, i, j;
+    var cRect = canvasRect();
+
+    /* 目前所有元件的矩形（主角固定不動，永遠是障礙物） */
+    function allRects(skipId) {
+      var out = [];
+      var hr = heroRect();
+      if (hr) out.push(hr);
+      tokens.forEach(function (t2, ti) {
+        if (t2.got || skipId === 'token' + ti) return;
+        var r = screenRect(t2.group, 6); if (r) out.push(r);
+      });
+      boards.forEach(function (b, bi) {
+        if (skipId === 'board' + bi) return;
+        var r = screenRect(b); if (r) out.push(r);
+      });
+      if (keyObjEl && keyObjEl.object3D.visible && keyObjEl.getAttribute('visible') !== false &&
+          skipId !== 'key') {
+        var kr = screenRect(keyObjEl.object3D); if (kr) out.push(kr);
+      }
+      return out;
+    }
+    function costOf(rect, others) {
+      if (!rect) return 0;
+      var c = 0;
+      for (var k = 0; k < others.length; k++) c += rectHit(rect, others[k]);
+      var out = Math.max(0, cRect.left + 6 - rect.x1) +
+                Math.max(0, rect.x2 - (cRect.left + cRect.width - 6)) +
+                Math.max(0, cRect.top + 6 - rect.y1) +
+                Math.max(0, rect.y2 - (cRect.top + cRect.height - 6));
+      return c + out * 400;
+    }
+
+    for (it = 0; it < iters; it++) {
+      sceneEl.object3D.updateMatrixWorld(true);
+      var moved = 0, pairs = [];
+
+      /* ① 看板與關鍵物件：只有一個高度旋鈕，直接在整個可用範圍做全域掃描。
+         爬山法在這裡會卡在局部極小（看板要越過主角才有乾淨位置，中途成本反而更高），
+         所以改成掃描 40–56 個位置取最小成本；平手時偏好離設計原位最近的那一個。 */
+      var mv = movables();
+      for (i = 0; i < mv.length; i++) {
+        var m = mv[i];
+        var others = allRects(m.id);
+        var v0 = m.get();
+        if (costOf(m.rect(), others) <= 0) continue;
+        var bestV = v0, bestC = Infinity;
+        for (j = 0; j <= m.steps; j++) {
+          var v = m.lo + (m.hi - m.lo) * j / m.steps;
+          m.set(v);
+          var c1 = costOf(m.rect(), others) + Math.abs(v - m.base) * 3;
+          if (c1 < bestC) { bestC = c1; bestV = v; }
+        }
+        m.set(bestV);
+        if (Math.abs(bestV - v0) > 1e-4) { pairs.push(m.id); moved++; }
+      }
+
+      /* ② 代幣：爬山搜尋（半徑 ± / 高度 ± / 環繞角度 ±） */
+      sceneEl.object3D.updateMatrixWorld(true);
+      for (i = 0; i < tokens.length; i++) {
+        var t2 = tokens[i];
+        if (t2.got) continue;
+        var oth = allRects('token' + i);
+        var baseT = tokenCost(i, oth, cRect);
+        if (baseT <= 0) continue;
+        var snap = { r: t2.r, by: t2.by, ang: t2.ang };
+        var cands = [
+          { r: Math.min(TOKEN_RMAX, t2.r + 0.03) },
+          { r: Math.max(TOKEN_RMIN, t2.r - 0.03) },
+          { by: Math.min(TOKEN_YMAX, t2.by + 0.05) },
+          { by: Math.max(TOKEN_YMIN, t2.by - 0.05) },
+          { ang: t2.ang + 0.10 },
+          { ang: t2.ang - 0.10 }
+        ];
+        var best = null, bestCost = baseT;
+        for (j = 0; j < cands.length; j++) {
+          var c = cands[j];
+          if (c.ang !== undefined && Math.abs(c.ang - TOKEN_ANG[i % 3]) > TOKEN_DANG) continue;
+          t2.r = c.r === undefined ? snap.r : c.r;
+          t2.by = c.by === undefined ? snap.by : c.by;
+          t2.ang = c.ang === undefined ? snap.ang : c.ang;
+          applyToken(t2, i);
+          var cost = tokenCost(i, oth, cRect);
+          if (cost < bestCost - 1) { bestCost = cost; best = { r: t2.r, by: t2.by, ang: t2.ang }; }
+          t2.r = snap.r; t2.by = snap.by; t2.ang = snap.ang;
+          applyToken(t2, i);
+        }
+        if (best) {
+          t2.r = best.r; t2.by = best.by; t2.ang = best.ang;
+          applyToken(t2, i);
+          pairs.push('token' + i);
+          moved++;
+        }
+      }
+
+      info.iter = it + 1;
+      info.hits = pairs;
+      info.moves += moved;
+      if (!moved) break;
+    }
+
+    /* ③ 收尾：仍有相交的代幣改用「角度 × 半徑 × 高度」的粗掃描（全域最小） */
+    sceneEl.object3D.updateMatrixWorld(true);
+    var stuck = [];
+    for (i = 0; i < tokens.length; i++) {
+      if (tokens[i].got) continue;
+      if (tokenCost(i, allRects('token' + i), cRect) > 0) stuck.push(i);
+    }
+    stuck.forEach(function (i2) {
+      var t2 = tokens[i2];
+      var oth = allRects('token' + i2);
+      var snap = { r: t2.r, by: t2.by, ang: t2.ang };
+      var best = null, bestC = tokenCost(i2, oth, cRect);
+      var a0 = TOKEN_ANG[i2 % 3];
+      for (var ai = -8; ai <= 8; ai++) {
+        for (var ri = 0; ri <= 6; ri++) {
+          for (var yi = 0; yi <= 5; yi++) {
+            t2.ang = a0 + ai * (TOKEN_DANG / 8);
+            t2.r = TOKEN_RMIN + (TOKEN_RMAX - TOKEN_RMIN) * ri / 6;
+            t2.by = TOKEN_YMIN + (TOKEN_YMAX - TOKEN_YMIN) * yi / 5;
+            applyToken(t2, i2);
+            var c = tokenCost(i2, oth, cRect) +
+                    Math.abs(t2.r - TOKEN_R0) * 40 + Math.abs(t2.ang - a0) * 40;
+            if (c < bestC - 1) { bestC = c; best = { r: t2.r, by: t2.by, ang: t2.ang }; }
+          }
+        }
+      }
+      if (best) { t2.r = best.r; t2.by = best.by; t2.ang = best.ang; info.moves++; }
+      else { t2.r = snap.r; t2.by = snap.by; t2.ang = snap.ang; }
+      applyToken(t2, i2);
+    });
+    info.stuckScan = stuck;
+    sceneEl.object3D.updateMatrixWorld(true);
+    info.tokenR = tokens.map(function (t2) { return +t2.r.toFixed(3); });
+    info.tokenY = tokens.map(function (t2) { return +t2.by.toFixed(3); });
+    info.tokenAng = tokens.map(function (t2) { return +t2.ang.toFixed(3); });
+    info.keyLift = +keyLift.toFixed(3);
+    info.boardDY = boards.map(function (b) {
+      return +(b.position.y - (b.userData.baseY === undefined ? b.position.y : b.userData.baseY)).toFixed(3);
+    });
+    info.hero = heroScreenRatio();
+    info.clean = info.hits.length === 0;
+    layoutInfo = info;
+    return info;
+  }
+  /* 合併多次呼叫：等下一幀矩陣更新完再算 */
+  function requestLayout() {
+    if (layoutPend) return;
+    layoutPend = requestAnimationFrame(function () {
+      layoutPend = 0;
+      try { relayout(); } catch (e) { log('relayout', e); }
+    });
+  }
+  /* 目前畫面上所有元素的投影矩形（驗收報表用） */
+  function rectReport() {
+    if (!sceneEl || !sceneEl.camera) return null;
+    sceneEl.object3D.updateMatrixWorld(true);
+    var out = { hero: heroRect(), tokens: [], key: null, boards: [], canvas: null };
+    var c = canvasRect();
+    out.canvas = { w: c.width, h: c.height };
+    tokens.forEach(function (t2) { out.tokens.push(t2.got ? null : screenRect(t2.group, 6)); });
+    if (keyObjEl && keyObjEl.object3D.visible && keyObjEl.getAttribute('visible') !== false)
+      out.key = screenRect(keyObjEl.object3D);
+    boards.forEach(function (b) { out.boards.push(screenRect(b)); });
+    /* 兩兩檢查 */
+    var list = [];
+    if (out.hero) list.push(['hero', out.hero]);
+    out.tokens.forEach(function (r, i) { if (r) list.push(['token' + i, r]); });
+    if (out.key) list.push(['key', out.key]);
+    out.boards.forEach(function (r, i) { if (r) list.push(['board' + i, r]); });
+    var bad = [];
+    for (var i = 0; i < list.length; i++)
+      for (var j = i + 1; j < list.length; j++) {
+        var a = rectHit(list[i][1], list[j][1], 0);
+        if (a > 0) bad.push({ a: list[i][0], b: list[j][0], area: Math.round(a) });
+      }
+    out.overlaps = bad;
+    out.clean = bad.length === 0;
+    out.heroRatio = out.hero ? +(out.hero.h / c.height).toFixed(4) : null;
+    return out;
   }
 
   /* ══════════════ 關鍵物件「脫出」 ══════════════ */
@@ -632,26 +1008,32 @@ window.STAGE = (function () {
     if (!keyObjEl) return null;
     keyObjEl.innerHTML = window.VISUALS ? VISUALS.ar3d(visualKind) : '';
     keyObjEl.setAttribute('visible', 'true');
-    keyObjEl.object3D.position.set(0, 0.05, -0.05);
+    /* 關鍵物件在「後上方」：keyZ 往後退，keyLift 由 relayout() 依碰撞結果加高 */
+    keyIdx = KEY_IDX0; keyLift = 0; keyBack = 0;
+    keyObjEl.object3D.position.set(0, 0.05, KEY_Z);
     keyObjEl.object3D.scale.setScalar(0.05);
+    keyObjEl.object3D.userData.rise = true;
     var t0 = performance.now();
     var run = function () {
       var k = Math.min(1, (performance.now() - t0) / 900);
       var e = 1 - Math.pow(1 - k, 3);
-      keyObjEl.object3D.position.y = 0.05 + e * 0.52;
+      keyObjEl.object3D.position.y = 0.05 + e * (KEY_Y + keyLift);
+      keyObjEl.object3D.position.z = KEY_Z - e * keyBack;
       keyObjEl.object3D.scale.setScalar(0.05 + e * 0.50);
       keyObjEl.object3D.rotation.y = e * Math.PI * 2;
       if (k < 1) requestAnimationFrame(run);
+      else { keyObjEl.object3D.userData.rise = false; requestLayout(); }
     };
     requestAnimationFrame(run);
-    burst(0, 0.12, -0.05, 46, 0xC99A3E, 0.55, 1.0);
-    setTimeout(function () { collectMats(); }, 60);
+    burst(0, 0.12, KEY_Z, 46, 0xC99A3E, 0.55, 1.0);
+    setTimeout(function () { collectMats(); requestLayout(); }, 60);
     return keyObjEl;
   }
   function hideKeyObject() {
     if (!keyObjEl) return;
     keyObjEl.setAttribute('visible', 'false');
     keyObjEl.innerHTML = '';
+    keyLift = 0; keyBack = 0; keyIdx = KEY_IDX0;
   }
 
   /* ══════════════ 舞台展開特效（每關只播一次） ══════════════ */
@@ -679,11 +1061,21 @@ window.STAGE = (function () {
   /* ══════════════ D-pad ══════════════ */
   var held = {};
   var SPEED = 0.52;
+  var GRAB = 0.15 * (HERO_SCALE / HERO_SCALE_BASE);   // 收集半徑隨主角尺寸放大
   function press(dir) { held[dir] = true; }
   function release(dir) { held[dir] = false; }
   function releaseAll() { held = {}; }
   function heroPos() { return { x: hero.x, z: hero.z, tx: hero.tx, tz: hero.tz }; }
   function setHeroPos(x, z) { hero.x = hero.tx = x; hero.z = hero.tz = z; }
+  /* v2.1：教學／答題階段把主角平滑移到卡片前緣（畫面下方），
+     好空出上半部給「後上方」的關鍵物件與看板——否則主角放大後三者一定互相壓到。 */
+  function moveHeroTo(x, z, thenLayout) {
+    hero.tx = Math.max(-LIM, Math.min(LIM, x));
+    hero.tz = Math.max(-LIM, Math.min(LIM, z));
+    releaseAll();
+    if (thenLayout !== false) setTimeout(requestLayout, 820);
+    return { x: hero.tx, z: hero.tz };
+  }
 
   /* ══════════════ 每幀 ══════════════ */
   var fpsN = 0, fpsT0 = 0, fpsVal = 0;
@@ -725,7 +1117,7 @@ window.STAGE = (function () {
       var yo = hero.yawEl.object3D;
       yo.position.set(hero.x, hero.y, hero.z);
       yo.rotation.y = hero.yaw * Math.PI / 180;
-      yo.scale.setScalar(0.30);
+      yo.scale.setScalar(HERO_SCALE);
     }
     if (hero.bodyEl && hero.bodyEl.object3D) {
       var bo = hero.bodyEl.object3D;
@@ -769,11 +1161,12 @@ window.STAGE = (function () {
       var ph = now / 1000 + t2.phase;
       t2.group.position.x = t2.bx + Math.sin(ph * 0.55) * 0.045;
       t2.group.position.z = t2.bz + Math.cos(ph * 0.42) * 0.045;
-      t2.group.position.y = 0.30 + Math.sin(ph * 1.15) * 0.055;
+      t2.group.position.y = t2.by + Math.sin(ph * 1.15) * 0.055;
       t2.core.rotation.y += dt * 1.4;
       t2.core.rotation.x += dt * 0.7;
       var ddx = t2.group.position.x - hero.x, ddz = t2.group.position.z - hero.z;
-      if (ddx * ddx + ddz * ddz < 0.15 * 0.15) collectToken(i);
+      /* 主角放大後，收集半徑同步放大，手感才一致 */
+      if (ddx * ddx + ddz * ddz < GRAB * GRAB) collectToken(i);
     }
 
     /* 看板／標籤面向鏡頭（billboard） */
@@ -935,6 +1328,8 @@ window.STAGE = (function () {
              fps: fpsVal, tokens: tokens.length,
              collected: tokens.filter(function (t2) { return t2.got; }).length,
              boards: boards.length, hits: hitObjects.length,
+             heroScale: HERO_SCALE,
+             heroRatio: (function () { var h = heroScreenRatio(); return h ? +h.ratio.toFixed(4) : null; })(),
              tracking: trackingOn, powerSave: powerSave, gyro: gyro.mode,
              stageParent: stageEl ? (stageEl.object3D.parent && stageEl.object3D.parent.el
                                      ? stageEl.object3D.parent.el.id : 'none') : 'none' };
@@ -985,7 +1380,7 @@ window.STAGE = (function () {
     showKeyObject: showKeyObject, hideKeyObject: hideKeyObject,
     expandStage: expandStage, stageWasExpanded: stageWasExpanded,
     press: press, release: release, releaseAll: releaseAll,
-    heroPos: heroPos, setHeroPos: setHeroPos,
+    heroPos: heroPos, setHeroPos: setHeroPos, moveHeroTo: moveHeroTo,
     heroAnim: function (a) { hero.anim = a; hero.animT = 0; },
     setCollectHandlers: setCollectHandlers,
     burst: burst, drawBoard: drawBoard, drawChip: drawChip, planeFrom: planeFrom, texFrom: texFrom,
@@ -995,6 +1390,26 @@ window.STAGE = (function () {
     hitList: function () { return hitObjects; },
     enableGyro: enableGyro, touchParallax: touchParallax,
     fadeIn: fadeIn, collectMats: collectMats,
+    /* v2.1 防重疊佈局 */
+    relayout: relayout, requestLayout: requestLayout, rectReport: rectReport,
+    heroScreenRatio: heroScreenRatio, screenRect: screenRect, rectHit: rectHit,
+    layoutInfo: function () { return layoutInfo; },
+    heroScale: function (v) {
+      if (v !== undefined) { HERO_SCALE = v; requestLayout(); }
+      return HERO_SCALE;
+    },
+    resetLayout: function () {
+      keyLift = 0; keyBack = 0; keyIdx = KEY_IDX0;
+      tokens.forEach(function (t2, i) {
+        t2.r = TOKEN_R0; t2.by = TOKEN_Y0; t2.ang = TOKEN_ANG[i % 3];
+        var sp = tokenSpot(i, t2.r); t2.bx = sp[0]; t2.bz = sp[1];
+        t2.group.position.set(t2.bx, t2.by, t2.bz);
+      });
+      boards.forEach(function (b) {
+        if (b.userData.baseY !== undefined) b.position.y = b.userData.baseY;
+      });
+      return true;
+    },
     stats: stats, simulate: simulate, syncFreeRig: syncFreeRig,
     forceCollectAll: forceCollectAll, walkToToken: walkToToken,
     THREE: function () { return T; },
